@@ -95,6 +95,17 @@ class NeedleSegmentorWidget(ScriptedLoadableModuleWidget):
     parametersFormLayout.addRow("mask threshold ", self.maskThresholdWidget)
 
     #
+    # Ridge operator filter
+    #
+    self.ridgeOperatorWidget = ctk.ctkSliderWidget()
+    self.ridgeOperatorWidget.singleStep = 1
+    self.ridgeOperatorWidget.minimum = 0
+    self.ridgeOperatorWidget.maximum = 100
+    self.ridgeOperatorWidget.value = 1
+    self.ridgeOperatorWidget.setToolTip("set up meijering filter threshold")
+    parametersFormLayout.addRow("Ridge Operator Threshold", self.ridgeOperatorWidget)
+
+    #
     # check box to trigger taking screen shots for later use in tutorials
     #
     self.enableScreenshotsFlagCheckBox = qt.QCheckBox()
@@ -132,7 +143,8 @@ class NeedleSegmentorWidget(ScriptedLoadableModuleWidget):
     enableScreenshotsFlag = self.enableScreenshotsFlagCheckBox.checked
     imageSlice = self.imageSliceSliderWidget.value
     maskThreshold = self.maskThresholdWidget.value
-    logic.run(self.magnitudevolume.currentNode(), self.phasevolume.currentNode(), imageSlice, maskThreshold, enableScreenshotsFlag)
+    ridgeOperator = self.ridgeOperatorWidget.value
+    logic.run(self.magnitudevolume.currentNode(), self.phasevolume.currentNode(), imageSlice, maskThreshold, ridgeOperator, enableScreenshotsFlag)
 
 class NeedleSegmentorLogic(ScriptedLoadableModuleLogic):
 
@@ -150,7 +162,7 @@ class NeedleSegmentorLogic(ScriptedLoadableModuleLogic):
     return True
 
 
-  def run(self, magnitudevolume , phasevolume, imageSlice, maskThreshold, enableScreenshots=0):
+  def run(self, magnitudevolume , phasevolume, imageSlice, maskThreshold, ridgeOperator, enableScreenshots=0):
 
     #magnitude volume
     magn_imageData = magnitudevolume.GetImageData()
@@ -266,7 +278,8 @@ class NeedleSegmentorLogic(ScriptedLoadableModuleLogic):
 
     B2 = cv2.bitwise_and(B2, B2, mask=mask3)
 
-    meiji = meijering(B2, sigmas=(1, 1), black_ridges=True)
+    ridgeOperator = int(ridgeOperator)
+    meiji = meijering(B2, sigmas=(ridgeOperator, ridgeOperator), black_ridges=True)
 
     (minVal, maxVal, minLoc, maxLoc) = cv2.minMaxLoc(meiji)
     circle1 = plt.Circle(maxLoc, 2, color='red')
