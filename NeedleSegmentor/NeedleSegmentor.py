@@ -6,8 +6,8 @@ import logging
 import numpy as np
 from vtk.util import numpy_support
 import matplotlib.pyplot as plt
+from scipy import ndimage
 from skimage.filters import meijering, frangi, sato
-import nibabel as nib
 import cv2
 import tempfile
 
@@ -90,7 +90,7 @@ class NeedleSegmentorWidget(ScriptedLoadableModuleWidget):
     self.maskThresholdWidget.singleStep = 1
     self.maskThresholdWidget.minimum = 0
     self.maskThresholdWidget.maximum = 100
-    self.maskThresholdWidget.value = 55
+    self.maskThresholdWidget.value = 25
     self.maskThresholdWidget.setToolTip("Set threshold value for computing the output image. Voxels that have intensities lower than this value will set to zero.")
     parametersFormLayout.addRow("mask threshold ", self.maskThresholdWidget)
 
@@ -196,6 +196,7 @@ class NeedleSegmentorLogic(ScriptedLoadableModuleLogic):
     mask = numpy_magn > maskThreshold
     mask = np.array(mask)
     mask = mask.astype(np.uint8)
+    # mask = ndimage.binary_fill_holes(mask).astype(np.uint8)
 
     slice = int(imageSlice)
 
@@ -272,9 +273,10 @@ class NeedleSegmentorLogic(ScriptedLoadableModuleLogic):
 
     kernel1 = np.ones((3, 3), np.uint8)
     kernel = np.ones((5, 5), np.uint8)
-    mask3 = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel1)
-    mask3 = cv2.erode(mask3, kernel, iterations=7)
-    mask3 = mask3.astype(np.uint8)
+    # mask3 = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel1)
+    mask3 = cv2.erode(mask, kernel, iterations=7)
+    # mask3 = mask3.astype(np.uint8)
+    mask3 = ndimage.binary_fill_holes(mask3).astype(np.uint8)
 
     B2 = cv2.bitwise_and(B2, B2, mask=mask3)
 
@@ -287,9 +289,11 @@ class NeedleSegmentorLogic(ScriptedLoadableModuleLogic):
     magn_imageOriginr, magn_imageOrigina, magn_imageOrigins = magnitudevolume.GetOrigin()
     magn_imageSpacingr, magn_imageSpacinga, magn_imageSpacings = magnitudevolume.GetSpacing()
 
+    #dev/ delete once done
     print("imageorigin: ", magn_imageOriginr, magn_imageOrigina, magn_imageOrigins)
     print("imageSpacing: ", magn_imageSpacingr, magn_imageSpacinga, magn_imageSpacings)
     print(maxLoc)
+
     x,y = np.split(maxLoc, [-1], 0)
     R_loc = (magn_imageOriginr)-(x*magn_imageSpacingr)
     A_loc = (magn_imageOrigina)-(slice*magn_imageSpacings)
@@ -337,16 +341,6 @@ class NeedleSegmentorTest(ScriptedLoadableModuleTest):
     self.test_NeedleSegmentor1()
 
   def test_NeedleSegmentor1(self):
-    """ Ideally you should have several levels of tests.  At the lowest level
-    tests should exercise the functionality of the logic with different inputs
-    (both valid and invalid).  At higher levels your tests should emulate the
-    way the user would interact with your code and confirm that it still works
-    the way you intended.
-    One of the most important features of the tests is that it should alert other
-    developers when their changes will have an impact on the behavior of your
-    module.  For example, if a developer removes a feature that you depend on,
-    your test should break so they know that the feature is needed.
-    """
 
     self.delayDisplay("Starting the test")
     #
