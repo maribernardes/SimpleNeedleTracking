@@ -90,7 +90,7 @@ class NeedleSegmentorWidget(ScriptedLoadableModuleWidget):
     self.maskThresholdWidget.singleStep = 1
     self.maskThresholdWidget.minimum = 0
     self.maskThresholdWidget.maximum = 100
-    self.maskThresholdWidget.value = 25
+    self.maskThresholdWidget.value = 70
     self.maskThresholdWidget.setToolTip("Set threshold value for computing the output image. Voxels that have intensities lower than this value will set to zero.")
     parametersFormLayout.addRow("mask threshold ", self.maskThresholdWidget)
 
@@ -193,10 +193,10 @@ class NeedleSegmentorLogic(ScriptedLoadableModuleLogic):
 
     #mask
     maskThreshold = int(maskThreshold)
-    mask = numpy_magn > maskThreshold
+    ret,mask = cv2.threshold(numpy_magn,maskThreshold,100,cv2.THRESH_BINARY)
+    # mask = numpy_magn > maskThreshold
     mask = np.array(mask)
     mask = mask.astype(np.uint8)
-    # mask = ndimage.binary_fill_holes(mask).astype(np.uint8)
 
     slice = int(imageSlice)
 
@@ -271,14 +271,19 @@ class NeedleSegmentorLogic(ScriptedLoadableModuleLogic):
     B2 = np.fft.ifft2(K1)
     B2 = np.real(B2)
 
-    kernel1 = np.ones((3, 3), np.uint8)
+    #Remove border of for false positive
+    border_size = 20
+    top, bottom, left, right = [border_size] * 4
+    mask_borderless = cv2.copyMakeBorder(mask, top, bottom, left, right, cv2.BORDER_CONSTANT, (0, 0, 0))
+    # kernel1 = np.ones((3, 3), np.uint8) ##legacy
+    # mask3 = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel1) ##legacy
     kernel = np.ones((5, 5), np.uint8)
-    # mask3 = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel1)
-    mask3 = cv2.erode(mask, kernel, iterations=7)
-    # mask3 = mask3.astype(np.uint8)
-    mask3 = ndimage.binary_fill_holes(mask3).astype(np.uint8)
+    mask_borderless = cv2.erode(mask_borderless, kernel, iterations=2)
+    mask_borderless = ndimage.binary_fill_holes(mask_borderless).astype(np.uint8)
+    x, y = mask_borderless.shape
+    mask_borderless = mask_borderless[0 + border_size:y - border_size, 0 + border_size:x - border_size]
 
-    B2 = cv2.bitwise_and(B2, B2, mask=mask3)
+    B2 = cv2.bitwise_and(B2, B2, mask=mask_borderless)
 
     ridgeOperator = int(ridgeOperator)
     meiji = meijering(B2, sigmas=(ridgeOperator, ridgeOperator), black_ridges=True)
