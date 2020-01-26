@@ -289,20 +289,27 @@ class NeedleSegmentorLogic(ScriptedLoadableModuleLogic):
     meiji = meijering(B2, sigmas=(ridgeOperator, ridgeOperator), black_ridges=True)
 
     (minVal, maxVal, minLoc, maxLoc) = cv2.minMaxLoc(meiji)
-    circle1 = plt.Circle(maxLoc, 2, color='red')
+    
+    result2 = np.reshape(meiji, meiji.shape[0]*meiji.shape[1])
+    
+    ids = np.argpartition(result2, -51)[-51:]
+    sort = ids[np.argsort(result2[ids])[::-1]]
+    
+    (y1,x1) = np.unravel_index(sort[0], meiji.shape)
 
+    point = (x1,y1)
+    
     magn_imageOriginr, magn_imageOrigina, magn_imageOrigins = magnitudevolume.GetOrigin()
     magn_imageSpacingr, magn_imageSpacinga, magn_imageSpacings = magnitudevolume.GetSpacing()
 
     #dev/ delete once done
     print("imageorigin: ", magn_imageOriginr, magn_imageOrigina, magn_imageOrigins)
     print("imageSpacing: ", magn_imageSpacingr, magn_imageSpacinga, magn_imageSpacings)
-    print(maxLoc)
 
-    x,y = np.split(maxLoc, [-1], 0)
-    R_loc = (magn_imageOriginr)-(x*magn_imageSpacingr)
+    #x,y = np.split(maxLoc, [-1], 0)
+    R_loc = (magn_imageOriginr)-(x1*magn_imageSpacingr)
     A_loc = (magn_imageOrigina)-(slice*magn_imageSpacings)
-    S_loc = (magn_imageOrigins)-(y*magn_imageSpacinga)
+    S_loc = (magn_imageOrigins)-(y1*magn_imageSpacinga)
     
 
     result = slicer.vtkMRMLMarkupsFiducialNode()
@@ -317,17 +324,6 @@ class NeedleSegmentorLogic(ScriptedLoadableModuleLogic):
     delete_unwrapped = slicer.mrmlScene.GetFirstNodeByName('unwrapped_phase')
     slicer.mrmlScene.RemoveNode(delete_unwrapped)
 
-    #
-    # fig, axs = plt.subplots(1, 2)
-    # fig.suptitle('Needle Tracking')
-    # axs[0].imshow(numpy_magn, cmap='gray')
-    # axs[0].set_title('Magnitude + Tracked')
-    # axs[0].add_artist(circle1)
-    # axs[0].axis('off')
-    # axs[1].set_title('Processed Phase Image')
-    # axs[1].imshow(meiji, cmap='jet')
-    # axs[1].axis('off')
-    # plt.savefig("mygraph.png")
     #TODO: convert the numpy coorinate to a RAS coorindate (R=x, S=y) and add a fiducial of the coordinate to the world coordinate (vtk)
 
     return True
