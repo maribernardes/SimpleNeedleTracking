@@ -191,20 +191,33 @@ class NeedleSegmentorLogic(ScriptedLoadableModuleLogic):
     phase_array = numpy_support.vtk_to_numpy(phase_scalars)
     numpy_phase = phase_array.reshape(phase_zed, phase_rows, phase_cols)
 
-    #mask
+    slice = int(imageSlice)  
     maskThreshold = int(maskThreshold)
-    ret,mask = cv2.threshold(numpy_magn,maskThreshold,100,cv2.THRESH_BINARY)
-    # mask = numpy_magn > maskThreshold
-    mask = np.array(mask)
-    mask = mask.astype(np.uint8)
-
-    slice = int(imageSlice)
 
     #2D Slice Selector
     ### 3 3D values are : numpy_magn , numpy_phase, mask
     numpy_magn = numpy_magn[slice,:,:]
     numpy_phase = numpy_phase[slice,:,:]
-    mask = mask[slice,:,:]
+    #mask = mask[slice,:,:]
+    numpy_magn_sliced = numpy_magn.astype(np.uint8)
+
+    #mask thresholding 
+    img = cv2.pyrDown(numpy_magn_sliced)
+    _, threshed = cv2.threshold(numpy_magn_sliced, 20, 255, cv2.THRESH_BINARY)
+    contours,_ = cv2.findContours(threshed, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+
+    #find maximum contour and draw   
+    cmax = max(contours, key = cv2.contourArea) 
+    epsilon = 0.002 * cv2.arcLength(cmax, True)
+    approx = cv2.approxPolyDP(cmax, epsilon, True)
+    cv2.drawContours(numpy_magn_sliced, [approx], -1, (0, 255, 0), 3)
+
+    width, height = numpy_magn_sliced.shape
+
+    #fill maximum contour and draw   
+    mask = np.zeros( [width, height, 3],dtype=np.uint8 )
+    cv2.fillPoly(mask, pts =[cmax], color=(255,255,255))
+    mask = mask[:,:,0]
 
     #phase_cropped
     phase_cropped = cv2.bitwise_and(numpy_phase, numpy_phase, mask=mask)
@@ -275,8 +288,7 @@ class NeedleSegmentorLogic(ScriptedLoadableModuleLogic):
     border_size = 20
     top, bottom, left, right = [border_size] * 4
     mask_borderless = cv2.copyMakeBorder(mask, top, bottom, left, right, cv2.BORDER_CONSTANT, (0, 0, 0))
-    # kernel1 = np.ones((3, 3), np.uint8) ##legacy
-    # mask3 = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel1) ##legacy
+    
     kernel = np.ones((5, 5), np.uint8)
     mask_borderless = cv2.erode(mask_borderless, kernel, iterations=2)
     mask_borderless = ndimage.binary_fill_holes(mask_borderless).astype(np.uint8)
@@ -288,7 +300,7 @@ class NeedleSegmentorLogic(ScriptedLoadableModuleLogic):
     ridgeOperator = int(ridgeOperator)
     meiji = meijering(B2, sigmas=(ridgeOperator, ridgeOperator), black_ridges=True)
 
-    (minVal, maxVal, minLoc, maxLoc) = cv2.minMaxLoc(meiji)
+    #(minVal, maxVal, minLoc, maxLoc) = cv2.minMaxLoc(meiji)
     
     result2 = np.reshape(meiji, meiji.shape[0]*meiji.shape[1])
     
