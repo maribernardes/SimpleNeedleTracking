@@ -101,7 +101,7 @@ class NeedleSegmentorWidget(ScriptedLoadableModuleWidget):
     self.ridgeOperatorWidget.singleStep = 1
     self.ridgeOperatorWidget.minimum = 0
     self.ridgeOperatorWidget.maximum = 100
-    self.ridgeOperatorWidget.value = 1
+    self.ridgeOperatorWidget.value = 5
     self.ridgeOperatorWidget.setToolTip("set up meijering filter threshold")
     parametersFormLayout.addRow("Ridge Operator Threshold", self.ridgeOperatorWidget)
 
@@ -298,7 +298,7 @@ class NeedleSegmentorLogic(ScriptedLoadableModuleLogic):
     B2 = cv2.bitwise_and(B2, B2, mask=mask_borderless)
 
     ridgeOperator = int(ridgeOperator)
-    meiji = meijering(B2, sigmas=(ridgeOperator, ridgeOperator), black_ridges=True)
+    meiji = sato(B2, sigmas=(ridgeOperator, ridgeOperator), black_ridges=True)
 
     #(minVal, maxVal, minLoc, maxLoc) = cv2.minMaxLoc(meiji)
     
