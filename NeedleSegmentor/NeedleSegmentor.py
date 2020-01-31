@@ -307,7 +307,7 @@ class NeedleSegmentorLogic(ScriptedLoadableModuleLogic):
     ids = np.argpartition(result2, -51)[-51:]
     sort = ids[np.argsort(result2[ids])[::-1]]
     
-    (y1,x1) = np.unravel_index(sort[0], meiji.shape)
+    (y1,x1) = np.unravel_index(sort[1], meiji.shape)
 
     point = (x1,y1)
     
