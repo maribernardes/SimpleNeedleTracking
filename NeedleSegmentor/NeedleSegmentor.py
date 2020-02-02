@@ -284,7 +284,7 @@ class NeedleSegmentorLogic(ScriptedLoadableModuleLogic):
     B2 = np.fft.ifft2(K1)
     B2 = np.real(B2)
 
-    #Remove border of for false positive
+    #Remove border  for false positive
     border_size = 20
     top, bottom, left, right = [border_size] * 4
     mask_borderless = cv2.copyMakeBorder(mask, top, bottom, left, right, cv2.BORDER_CONSTANT, (0, 0, 0))
@@ -307,7 +307,7 @@ class NeedleSegmentorLogic(ScriptedLoadableModuleLogic):
     ids = np.argpartition(result2, -51)[-51:]
     sort = ids[np.argsort(result2[ids])[::-1]]
     
-    (y1,x1) = np.unravel_index(sort[1], meiji.shape)
+    (y1,x1) = np.unravel_index(sort[0], meiji.shape)
 
     point = (x1,y1)
     
@@ -323,11 +323,34 @@ class NeedleSegmentorLogic(ScriptedLoadableModuleLogic):
     A_loc = (magn_imageOrigina)-(slice*magn_imageSpacings)
     S_loc = (magn_imageOrigins)-(y1*magn_imageSpacinga)
     
+    ras = (R_loc,A_loc,S_loc)
 
-    result = slicer.vtkMRMLMarkupsFiducialNode()
-    result.AddFiducial(R_loc,A_loc,S_loc,"Needle_Tip")
-    result.SetName('needle_location')
-    slicer.mrmlScene.AddNode(result)
+    nodes = slicer.mrmlScene.GetNodesByClass('vtkMRMLAnnotationFiducialNode')
+    nbNodes = nodes.GetNumberOfItems()
+
+    if (nbNodes >= 1): 
+      for i in range(nbNodes):
+        # pass
+        fiducial = slicer.util.getNode('temp')
+        # node = nodes.GetItemAsObject(i)
+        # name = node.GetName()
+        #        
+    else:
+      fiducial = slicer.mrmlScene.CreateNodeByClass ('vtkMRMLAnnotationFiducialNode')
+      fiducial.SetName('temp')
+      fiducial.Initialize(slicer.mrmlScene)
+      fiducial.SetAttribute('TemporaryFiducial', '1')
+
+    # fiducial = slicer.mrmlScene.CreateNodeByClass ('vtkMRMLAnnotationFiducialNode')
+    # fiducial.SetName('temp')
+    # fiducial.Initialize(slicer.mrmlScene)
+    fiducial.SetFiducialCoordinates(ras)
+    # fiducial.SetAttribute('TemporaryFiducial', '1')
+    #fiducial.SetLocked(True)
+    # result = slicer.vtkMRMLMarkupsFiducialNode()
+    # result.AddFiducial(R_loc,A_loc,S_loc,"Needle_Tip")
+    # result.SetName('needle_location')
+    # slicer.mrmlScene.AddNode(result)
 
 
     ###TODO: dont delete the volume after use. create a checkpoint to update on only one volume
