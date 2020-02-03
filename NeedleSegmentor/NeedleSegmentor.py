@@ -5,7 +5,7 @@ from slicer.ScriptedLoadableModule import *
 import logging
 import numpy as np
 from vtk.util import numpy_support
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 from scipy import ndimage
 from skimage.filters import meijering, frangi, sato
 import cv2
@@ -331,33 +331,32 @@ class NeedleSegmentorLogic(ScriptedLoadableModuleLogic):
     if (nbNodes >= 1): 
       for i in range(nbNodes):
         # pass
-        fiducial = slicer.util.getNode('temp')
+        fiducial = slicer.util.getNode('needle_tip')
         # node = nodes.GetItemAsObject(i)
         # name = node.GetName()
         #        
     else:
       fiducial = slicer.mrmlScene.CreateNodeByClass ('vtkMRMLAnnotationFiducialNode')
-      fiducial.SetName('temp')
+      fiducial.SetName('needle_tip')
       fiducial.Initialize(slicer.mrmlScene)
       fiducial.SetAttribute('TemporaryFiducial', '1')
+      fiducial.SetLocked(True)
+      displayNode = fiducial.GetDisplayNode()
+      displayNode.SetGlyphScale(2)
+      displayNode.SetColor(1,1,0)
+      textNode = fiducial.GetAnnotationTextDisplayNode()
+      textNode.SetTextScale(4)
+      textNode.SetColor(1, 1, 0)
 
-    # fiducial = slicer.mrmlScene.CreateNodeByClass ('vtkMRMLAnnotationFiducialNode')
-    # fiducial.SetName('temp')
-    # fiducial.Initialize(slicer.mrmlScene)
     fiducial.SetFiducialCoordinates(ras)
-    # fiducial.SetAttribute('TemporaryFiducial', '1')
-    #fiducial.SetLocked(True)
-    # result = slicer.vtkMRMLMarkupsFiducialNode()
-    # result.AddFiducial(R_loc,A_loc,S_loc,"Needle_Tip")
-    # result.SetName('needle_location')
-    # slicer.mrmlScene.AddNode(result)
-
 
     ###TODO: dont delete the volume after use. create a checkpoint to update on only one volume
     delete_wrapped = slicer.mrmlScene.GetFirstNodeByName('phase_cropped')
     slicer.mrmlScene.RemoveNode(delete_wrapped)
     delete_unwrapped = slicer.mrmlScene.GetFirstNodeByName('unwrapped_phase')
     slicer.mrmlScene.RemoveNode(delete_unwrapped)
+
+
 
     #TODO: convert the numpy coorinate to a RAS coorindate (R=x, S=y) and add a fiducial of the coordinate to the world coordinate (vtk)
 
