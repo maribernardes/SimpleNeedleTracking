@@ -5,7 +5,7 @@ from slicer.ScriptedLoadableModule import *
 import logging
 import numpy as np
 from vtk.util import numpy_support
-# import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 from scipy import ndimage
 from skimage.filters import meijering, frangi, sato
 import cv2
@@ -92,7 +92,7 @@ class NeedleSegmentorWidget(ScriptedLoadableModuleWidget):
     self.maskThresholdWidget.maximum = 100
     self.maskThresholdWidget.value = 70
     self.maskThresholdWidget.setToolTip("Set threshold value for computing the output image. Voxels that have intensities lower than this value will set to zero.")
-    parametersFormLayout.addRow("mask threshold ", self.maskThresholdWidget)
+    parametersFormLayout.addRow("Mask Threshold ", self.maskThresholdWidget)
 
     #
     # Ridge operator filter
@@ -167,15 +167,16 @@ class NeedleSegmentorLogic(ScriptedLoadableModuleLogic):
     #magnitude volume
     magn_imageData = magnitudevolume.GetImageData()
     magn_rows, magn_cols, magn_zed = magn_imageData.GetDimensions()
+    print ("rows: ", magn_rows,"cols: ", magn_cols, "zed", magn_zed)
     magn_scalars = magn_imageData.GetPointData().GetScalars()
     magn_imageOrigin = magnitudevolume.GetOrigin()
     magn_imageSpacing = magnitudevolume.GetSpacing()
     magn_matrix = vtk.vtkMatrix4x4()
-    magnitudevolume.GetIJKToRASDirectionMatrix(magn_matrix)
+    magnitudevolume.GetIJKToRASMatrix(magn_matrix)
     magnitudevolume.CreateDefaultDisplayNodes()
 
 
-    # WRITE PHASE FILE IN NIFTI FORMAT
+    # phase volume
     phase_imageData = phasevolume.GetImageData()
     phase_rows, phase_cols, phase_zed = phase_imageData.GetDimensions()
     phase_scalars = phase_imageData.GetPointData().GetScalars()
@@ -307,56 +308,99 @@ class NeedleSegmentorLogic(ScriptedLoadableModuleLogic):
     ids = np.argpartition(result2, -51)[-51:]
     sort = ids[np.argsort(result2[ids])[::-1]]
     
-    (y1,x1) = np.unravel_index(sort[0], meiji.shape)
+    (y1,x1) = np.unravel_index(sort[0], meiji.shape) # best match
 
     point = (x1,y1)
+    coords = [x1,y1,slice]
+    circle1 = plt.Circle(point,2,color='red')
+
+    # Create MRML transform node
     
-    magn_imageOriginr, magn_imageOrigina, magn_imageOrigins = magnitudevolume.GetOrigin()
-    magn_imageSpacingr, magn_imageSpacinga, magn_imageSpacings = magnitudevolume.GetSpacing()
+    transforms = slicer.mrmlScene.GetNodesByClassByName('vtkMRMLLinearTransformNode','Transform')
+    nbTransforms = transforms.GetNumberOfItems()
+    if (nbTransforms >= 1): 
+      for i in range(nbTransforms):
+        transformNode = slicer.util.getNode('Transform')    
+    else:
+      # transformNode = slicer.mrmlScene.CreateNodeByClass ('vtkMRMLAnnotationFiducialNode')
+      transformNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLLinearTransformNode')
+      transformNode.SetName("Transform")
+      transformNode.SetAndObserveMatrixTransformToParent(magn_matrix)
 
-    #dev/ delete once done
-    print("imageorigin: ", magn_imageOriginr, magn_imageOrigina, magn_imageOrigins)
-    print("imageSpacing: ", magn_imageSpacingr, magn_imageSpacinga, magn_imageSpacings)
-
-    #x,y = np.split(maxLoc, [-1], 0)
-    R_loc = (magn_imageOriginr)-(x1*magn_imageSpacingr)
-    A_loc = (magn_imageOrigina)-(slice*magn_imageSpacings)
-    S_loc = (magn_imageOrigins)-(y1*magn_imageSpacinga)
-    
-    ras = (R_loc,A_loc,S_loc)
-
-    nodes = slicer.mrmlScene.GetNodesByClass('vtkMRMLAnnotationFiducialNode')
+    # Fiducial Creation
+    nodes = slicer.mrmlScene.GetNodesByClass('vtkMRMLMarkupsFiducialNode')
     nbNodes = nodes.GetNumberOfItems()
-
     if (nbNodes >= 1): 
       for i in range(nbNodes):
-        # pass
-        fiducial = slicer.util.getNode('needle_tip')
-        # node = nodes.GetItemAsObject(i)
-        # name = node.GetName()
-        #        
+        fidNode1 = slicer.util.getNode('needle_tip')
+        ## to view mutiple fiducial comment the line below
+        fidNode1.RemoveAllMarkups()
     else:
-      fiducial = slicer.mrmlScene.CreateNodeByClass ('vtkMRMLAnnotationFiducialNode')
-      fiducial.SetName('needle_tip')
-      fiducial.Initialize(slicer.mrmlScene)
-      fiducial.SetAttribute('TemporaryFiducial', '1')
-      fiducial.SetLocked(True)
-      displayNode = fiducial.GetDisplayNode()
-      displayNode.SetGlyphScale(2)
-      displayNode.SetColor(1,1,0)
-      textNode = fiducial.GetAnnotationTextDisplayNode()
-      textNode.SetTextScale(4)
-      textNode.SetColor(1, 1, 0)
+     fidNode1 = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode", "needle_tip")
+     fidNode1.CreateDefaultDisplayNodes()
+    #  fidNode1.SetMaximumNumberOfControlPoints(1) 
 
-    fiducial.SetFiducialCoordinates(ras)
+
+    fidNode1.AddFiducialFromArray(coords)
+    fidNode1.SetAndObserveTransformNodeID(transformNode.GetID())
+
+    # magn_imageOriginr, magn_imageOrigina, magn_imageOrigins = magnitudevolume.GetOrigin()
+    # magn_imageSpacingr, magn_imageSpacinga, magn_imageSpacings = magnitudevolume.GetSpacing()
+
+    # #dev/ delete once done
+    # print("imageorigin: ", magn_imageOriginr, magn_imageOrigina, magn_imageOrigins)
+    # print("imageSpacing: ", magn_imageSpacingr, magn_imageSpacinga, magn_imageSpacings)
+    # print (x1, y1)
+
+    #x,y = np.split(maxLoc, [-1], 0)
+    #### RAS
+    # R_loc = (magn_imageOriginr)-(x1*magn_imageSpacinga)
+    # A_loc = (magn_imageOrigina)+(slice*magn_imageSpacinga)
+    # S_loc = (magn_imageOrigins)-(y1*magn_imageSpacingr)
+    # ras = (R_loc,A_loc,S_loc)
+
+
+    # nodes = slicer.mrmlScene.GetNodesByClass('vtkMRMLAnnotationFiducialNode')
+    # nbNodes = nodes.GetNumberOfItems()
+    # if (nbNodes >= 1): 
+    #   for i in range(nbNodes):
+    #     # pass
+    #     fiducial = slicer.util.getNode('needle_tip')
+    #     # node = nodes.GetItemAsObject(i)
+    #     # name = node.GetName()
+    #     #        
+    # else:
+    #   fiducial = slicer.mrmlScene.CreateNodeByClass ('vtkMRMLAnnotationFiducialNode')
+    #   fiducial.SetName('needle_tip')
+    #   fiducial.Initialize(slicer.mrmlScene)
+    #   fiducial.SetAttribute('TemporaryFiducial', '1')
+    #   fiducial.SetLocked(True)
+    #   displayNode = fiducial.GetDisplayNode()
+    #   displayNode.SetGlyphScale(2)
+    #   displayNode.SetColor(1,1,0)
+    #   textNode = fiducial.GetAnnotationTextDisplayNode()
+    #   textNode.SetTextScale(4)
+    #   textNode.SetColor(1, 1, 0)
+
+    # fiducial.SetFiducialCoordinates(ras)
 
     ###TODO: dont delete the volume after use. create a checkpoint to update on only one volume
     delete_wrapped = slicer.mrmlScene.GetFirstNodeByName('phase_cropped')
     slicer.mrmlScene.RemoveNode(delete_wrapped)
     delete_unwrapped = slicer.mrmlScene.GetFirstNodeByName('unwrapped_phase')
     slicer.mrmlScene.RemoveNode(delete_unwrapped)
-
-
+    
+    
+    fig, axs = plt.subplots(1,2)
+    fig.suptitle('Needle Tracking')
+    axs[0].imshow(meiji, cmap='gray')
+    axs[0].set_title('Magnitude + Tracked')
+    axs[0].add_artist(circle1)
+    axs[0].axis('off')
+    axs[1].set_title('Processed Phase Image')
+    axs[1].imshow(meiji, cmap='hsv')
+    axs[1].axis('off')
+    plt.savefig('mygraph.png')
 
     #TODO: convert the numpy coorinate to a RAS coorindate (R=x, S=y) and add a fiducial of the coordinate to the world coordinate (vtk)
 
