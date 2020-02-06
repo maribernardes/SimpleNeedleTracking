@@ -320,7 +320,9 @@ class NeedleSegmentorLogic(ScriptedLoadableModuleLogic):
     nbTransforms = transforms.GetNumberOfItems()
     if (nbTransforms >= 1): 
       for i in range(nbTransforms):
-        transformNode = slicer.util.getNode('Transform')    
+        transformNode = slicer.util.getNode('Transform')
+        transformNode.SetAndObserveMatrixTransformToParent(magn_matrix)
+
     else:
       # transformNode = slicer.mrmlScene.CreateNodeByClass ('vtkMRMLAnnotationFiducialNode')
       transformNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLLinearTransformNode')
@@ -391,16 +393,16 @@ class NeedleSegmentorLogic(ScriptedLoadableModuleLogic):
     slicer.mrmlScene.RemoveNode(delete_unwrapped)
     
     
-    fig, axs = plt.subplots(1,2)
-    fig.suptitle('Needle Tracking')
-    axs[0].imshow(meiji, cmap='gray')
-    axs[0].set_title('Magnitude + Tracked')
-    axs[0].add_artist(circle1)
-    axs[0].axis('off')
-    axs[1].set_title('Processed Phase Image')
-    axs[1].imshow(meiji, cmap='hsv')
-    axs[1].axis('off')
-    plt.savefig('mygraph.png')
+    # fig, axs = plt.subplots(1,2)
+    # fig.suptitle('Needle Tracking')
+    # axs[0].imshow(meiji, cmap='gray')
+    # axs[0].set_title('Magnitude + Tracked')
+    # axs[0].add_artist(circle1)
+    # axs[0].axis('off')
+    # axs[1].set_title('Processed Phase Image')
+    # axs[1].imshow(meiji, cmap='hsv')
+    # axs[1].axis('off')
+    # plt.savefig('mygraph.png')
 
     #TODO: convert the numpy coorinate to a RAS coorindate (R=x, S=y) and add a fiducial of the coordinate to the world coordinate (vtk)
 
