@@ -1,3 +1,4 @@
+##adding real time needle tracking
 import os
 import unittest
 import vtk, qt, ctk, slicer
@@ -78,7 +79,7 @@ class NeedleSegmentorWidget(ScriptedLoadableModuleWidget):
     self.imageSliceSliderWidget = ctk.ctkSliderWidget()
     self.imageSliceSliderWidget.singleStep = 1
     self.imageSliceSliderWidget.minimum = 0
-    self.imageSliceSliderWidget.maximum = 20
+    self.imageSliceSliderWidget.maximum = 70
     self.imageSliceSliderWidget.value = 1
     self.imageSliceSliderWidget.setToolTip("Select 2D slice")
     parametersFormLayout.addRow("2D Slice ", self.imageSliceSliderWidget)
@@ -90,7 +91,7 @@ class NeedleSegmentorWidget(ScriptedLoadableModuleWidget):
     self.maskThresholdWidget.singleStep = 1
     self.maskThresholdWidget.minimum = 0
     self.maskThresholdWidget.maximum = 100
-    self.maskThresholdWidget.value = 70
+    self.maskThresholdWidget.value = 20
     self.maskThresholdWidget.setToolTip("Set threshold value for computing the output image. Voxels that have intensities lower than this value will set to zero.")
     parametersFormLayout.addRow("Mask Threshold ", self.maskThresholdWidget)
 
@@ -204,7 +205,7 @@ class NeedleSegmentorLogic(ScriptedLoadableModuleLogic):
 
     #mask thresholding 
     img = cv2.pyrDown(numpy_magn_sliced)
-    _, threshed = cv2.threshold(numpy_magn_sliced, 20, 255, cv2.THRESH_BINARY)
+    _, threshed = cv2.threshold(numpy_magn_sliced, maskThreshold, 255, cv2.THRESH_BINARY)
     contours,_ = cv2.findContours(threshed, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
     #find maximum contour and draw   
@@ -393,16 +394,16 @@ class NeedleSegmentorLogic(ScriptedLoadableModuleLogic):
     slicer.mrmlScene.RemoveNode(delete_unwrapped)
     
     
-    # fig, axs = plt.subplots(1,2)
-    # fig.suptitle('Needle Tracking')
-    # axs[0].imshow(meiji, cmap='gray')
-    # axs[0].set_title('Magnitude + Tracked')
-    # axs[0].add_artist(circle1)
-    # axs[0].axis('off')
-    # axs[1].set_title('Processed Phase Image')
-    # axs[1].imshow(meiji, cmap='hsv')
-    # axs[1].axis('off')
-    # plt.savefig('mygraph.png')
+    fig, axs = plt.subplots(1,2)
+    fig.suptitle('Needle Tracking')
+    axs[0].imshow(meiji, cmap='gray')
+    axs[0].set_title('Magnitude + Tracked')
+    axs[0].add_artist(circle1)
+    axs[0].axis('off')
+    axs[1].set_title('Processed Phase Image')
+    axs[1].imshow(meiji, cmap='hsv')
+    axs[1].axis('off')
+    plt.savefig('mygraph.png')
 
     #TODO: convert the numpy coorinate to a RAS coorindate (R=x, S=y) and add a fiducial of the coordinate to the world coordinate (vtk)
 
