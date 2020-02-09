@@ -115,6 +115,34 @@ class NeedleSegmentorWidget(ScriptedLoadableModuleWidget):
     parametersFormLayout.addRow("Enable Screenshots", self.enableScreenshotsFlagCheckBox)
 
     #
+    # Select which scene view to track
+    #
+    self.sceneViewButton_red = qt.QRadioButton('Red')
+    self.sceneViewButton_red.setFixedWidth(120)
+
+    self.sceneViewButton_yellow = qt.QRadioButton('Yellow')
+    self.sceneViewButton_yellow.setFixedWidth(120)
+
+    self.sceneViewButton_green = qt.QRadioButton('Green')
+    self.sceneViewButton_green.checked = 1
+    self.sceneViewButton_green.setFixedWidth(120)
+
+    
+    layout = qt.QHBoxLayout(parametersCollapsibleButton)
+    layout.addWidget(self.sceneViewButton_red)
+    layout.addWidget(self.sceneViewButton_yellow)
+    layout.addWidget(self.sceneViewButton_green)
+    parametersFormLayout.addRow("Scene view:",layout)
+
+    #   
+    # Real-Time Tracking 
+    #
+    self.trackingButton = qt.QPushButton("Real-Time Tracking")
+    self.trackingButton.toolTip = "Observe slice from red scene viewer"
+    self.trackingButton.enabled = False
+    parametersFormLayout.addRow(self.trackingButton)
+
+    #
     # Apply Button
     #
     self.applyButton = qt.QPushButton("Apply")
@@ -124,6 +152,7 @@ class NeedleSegmentorWidget(ScriptedLoadableModuleWidget):
 
     # connections
     self.applyButton.connect('clicked(bool)', self.onApplyButton)
+    self.trackingButton.connect('clicked(bool)', self.onRealTimeTracking)
     self.magnitudevolume.connect("currentNodeChanged(vtkMRMLNode*)", self.onSelect)
     self.phasevolume.connect("currentNodeChanged(vtkMRMLNode*)", self.onSelect)
 
@@ -138,6 +167,30 @@ class NeedleSegmentorWidget(ScriptedLoadableModuleWidget):
 
   def onSelect(self):
     self.applyButton.enabled = self.magnitudevolume.currentNode() and self.phasevolume.currentNode()
+    self.trackingButton.enabled = self.magnitudevolume.currentNode() and self.phasevolume.currentNode()
+
+  def onRealTimeTracking(self):
+    logic = NeedleSegmentorLogic()
+    enableScreenshotsFlag = self.enableScreenshotsFlagCheckBox.checked
+    if (self.sceneViewButton_red.checked == True):
+      sceneSelecter = self.sceneViewButton_red.checked
+      scene_viewer = slicer.mrmlScene.GetNodesByID("vtkMRMLSliceNodeRed")
+      z_axis = 2
+    elif (self.sceneViewButton_yellow.checked ==True):
+      sceneSelecter = self.sceneViewButton_yellow.checked
+      scene_viewer = slicer.mrmlScene.GetNodesByID("vtkMRMLSliceNodeYellow")
+      z_axis = 0
+    elif (self.sceneViewButton_green.checked ==True):
+      sceneSelecter = self.sceneViewButton_green.checked
+      scene_viewer = slicer.mrmlScene.GetNodesByID("vtkMRMLSliceNodeGreen")
+      z_axis = 1
+
+    imageSlice = self.imageSliceSliderWidget.value
+    maskThreshold = self.maskThresholdWidget.value
+    ridgeOperator = self.ridgeOperatorWidget.value
+    logic.run(self.magnitudevolume.currentNode(), self.phasevolume.currentNode(), imageSlice, maskThreshold, ridgeOperator, enableScreenshotsFlag,
+    z_axis, scene_viewer)
+
 
   def onApplyButton(self):
     logic = NeedleSegmentorLogic()
@@ -164,6 +217,12 @@ class NeedleSegmentorLogic(ScriptedLoadableModuleLogic):
 
 
   def run(self, magnitudevolume , phasevolume, imageSlice, maskThreshold, ridgeOperator, enableScreenshots=0):
+
+    # # Slicer Node Green
+    # node_green = slicer.mrmlScene.GetNodesByID("vtkMRMLSliceNodeGreen")
+    # element = node_green.GetXYZToRas()
+    # slice_number = element.GetElement("depend on the slice of choice",3)
+    
 
     #magnitude volume
     magn_imageData = magnitudevolume.GetImageData()
