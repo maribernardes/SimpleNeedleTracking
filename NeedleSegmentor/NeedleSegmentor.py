@@ -236,7 +236,7 @@ class NeedleSegmentorLogic(ScriptedLoadableModuleLogic):
     magn_imageSpacing = magnitudevolume.GetSpacing()
     magn_matrix = vtk.vtkMatrix4x4()
     magnitudevolume.GetIJKToRASMatrix(magn_matrix)
-    magnitudevolume.CreateDefaultDisplayNodes()
+    # magnitudevolume.CreateDefaultDisplayNodes()
 
 
     # phase volume
@@ -254,14 +254,14 @@ class NeedleSegmentorLogic(ScriptedLoadableModuleLogic):
       offset = sliceWidgetLogic.GetSliceOffset()
       offsets.append(offset)
 
-    z,x,y = offsets
+    z_ras,x_ras,y_ras = offsets
 
     # Inputs
     # volumeNode = getNode('11: AdjGre')
     markupsIndex = 0
 
     # Get point coordinate in RAS
-    point_Ras = [x, y, z, 1]
+    point_Ras = [x_ras, y_ras, z_ras, 1]
     #markupsNode.GetNthFiducialWorldCoordinates(markupsIndex, point_Ras)
     # If volume node is transformed, apply that transform to get volume's RAS coordinates
     transformRasToVolumeRas = vtk.vtkGeneralTransform()
@@ -277,7 +277,7 @@ class NeedleSegmentorLogic(ScriptedLoadableModuleLogic):
 
     # Print output
     
-    x_axis,y_axis,slice_number = point_Ijk
+    x_ijk,y_ijk,slice_number = point_Ijk
 
     #Convert vtk to numpy
     magn_array = numpy_support.vtk_to_numpy(magn_scalars)
@@ -432,52 +432,12 @@ class NeedleSegmentorLogic(ScriptedLoadableModuleLogic):
         fidNode1.RemoveAllMarkups()
     else:
      fidNode1 = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode", "needle_tip")
-     fidNode1.CreateDefaultDisplayNodes()
+    #  fidNode1.CreateDefaultDisplayNodes()
     #  fidNode1.SetMaximumNumberOfControlPoints(1) 
 
 
     fidNode1.AddFiducialFromArray(coords)
     fidNode1.SetAndObserveTransformNodeID(transformNode.GetID())
-
-    # magn_imageOriginr, magn_imageOrigina, magn_imageOrigins = magnitudevolume.GetOrigin()
-    # magn_imageSpacingr, magn_imageSpacinga, magn_imageSpacings = magnitudevolume.GetSpacing()
-
-    # #dev/ delete once done
-    # print("imageorigin: ", magn_imageOriginr, magn_imageOrigina, magn_imageOrigins)
-    # print("imageSpacing: ", magn_imageSpacingr, magn_imageSpacinga, magn_imageSpacings)
-    # print (x1, y1)
-
-    #x,y = np.split(maxLoc, [-1], 0)
-    #### RAS
-    # R_loc = (magn_imageOriginr)-(x1*magn_imageSpacinga)
-    # A_loc = (magn_imageOrigina)+(slice*magn_imageSpacinga)
-    # S_loc = (magn_imageOrigins)-(y1*magn_imageSpacingr)
-    # ras = (R_loc,A_loc,S_loc)
-
-
-    # nodes = slicer.mrmlScene.GetNodesByClass('vtkMRMLAnnotationFiducialNode')
-    # nbNodes = nodes.GetNumberOfItems()
-    # if (nbNodes >= 1): 
-    #   for i in range(nbNodes):
-    #     # pass
-    #     fiducial = slicer.util.getNode('needle_tip')
-    #     # node = nodes.GetItemAsObject(i)
-    #     # name = node.GetName()
-    #     #        
-    # else:
-    #   fiducial = slicer.mrmlScene.CreateNodeByClass ('vtkMRMLAnnotationFiducialNode')
-    #   fiducial.SetName('needle_tip')
-    #   fiducial.Initialize(slicer.mrmlScene)
-    #   fiducial.SetAttribute('TemporaryFiducial', '1')
-    #   fiducial.SetLocked(True)
-    #   displayNode = fiducial.GetDisplayNode()
-    #   displayNode.SetGlyphScale(2)
-    #   displayNode.SetColor(1,1,0)
-    #   textNode = fiducial.GetAnnotationTextDisplayNode()
-    #   textNode.SetTextScale(4)
-    #   textNode.SetColor(1, 1, 0)
-
-    # fiducial.SetFiducialCoordinates(ras)
 
     ###TODO: dont delete the volume after use. create a checkpoint to update on only one volume
     delete_wrapped = slicer.mrmlScene.GetFirstNodeByName('phase_cropped')
@@ -485,9 +445,11 @@ class NeedleSegmentorLogic(ScriptedLoadableModuleLogic):
     delete_unwrapped = slicer.mrmlScene.GetFirstNodeByName('unwrapped_phase')
     slicer.mrmlScene.RemoveNode(delete_unwrapped)
 
-    #TODO: convert the numpy coorinate to a RAS coorindate (R=x, S=y) and add a fiducial of the coordinate to the world coordinate (vtk)
-
-    return True
+    magnitudevolume.CreateDefaultDisplayNodes()
+    conclusion = slicer.mrmlScene.GetNodeByID('vtkMRMLSliceNodeYellow')
+    conclusion.SetSliceOffset(x_ras)
+    
+    # return True
 
   def run(self, magnitudevolume , phasevolume, imageSlice, maskThreshold, ridgeOperator,z_axis,sceneSelecter, enableScreenshots=0):
 
@@ -501,7 +463,7 @@ class NeedleSegmentorLogic(ScriptedLoadableModuleLogic):
     print(magn_imageSpacing)
     magn_matrix = vtk.vtkMatrix4x4()
     magnitudevolume.GetIJKToRASMatrix(magn_matrix)
-    magnitudevolume.CreateDefaultDisplayNodes()
+    # magnitudevolume.CreateDefaultDisplayNodes()
 
 
     # phase volume
@@ -675,7 +637,7 @@ class NeedleSegmentorLogic(ScriptedLoadableModuleLogic):
         fidNode1.RemoveAllMarkups()
     else:
      fidNode1 = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode", "needle_tip")
-     fidNode1.CreateDefaultDisplayNodes()
+    #  fidNode1.CreateDefaultDisplayNodes()
     #  fidNode1.SetMaximumNumberOfControlPoints(1) 
 
 
