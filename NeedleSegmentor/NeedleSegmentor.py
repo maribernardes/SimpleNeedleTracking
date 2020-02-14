@@ -184,23 +184,23 @@ class NeedleSegmentorWidget(ScriptedLoadableModuleWidget):
     logic = NeedleSegmentorLogic()
     enableScreenshotsFlag = self.enableScreenshotsFlagCheckBox.checked
     if (self.sceneViewButton_red.checked == True):
-      sceneSelecter = self.sceneViewButton_red.checked
+      viewSelecter = ("Red")
       # scene_viewer = slicer.mrmlScene.GetNodesByID("vtkMRMLSliceNodeRed")
-      self.z_axis = (2)
+      self.z_axis = (0)
     elif (self.sceneViewButton_yellow.checked ==True):
-      sceneSelecter = self.sceneViewButton_yellow.checked
+      viewSelecter = ("Yellow")
       # scene_viewer = slicer.mrmlScene.GetNodesByID("vtkMRMLSliceNodeYellow")
-      self.z_axis = 0
+      self.z_axis = 1
     elif (self.sceneViewButton_green.checked ==True):
-      sceneSelecter = self.sceneViewButton_green.checked
+      viewSelecter = ("Green")
       # scene_viewer = slicer.mrmlScene.GetNodesByID("vtkMRMLSliceNodeGreen")
-      self.z_axis = (1)
+      self.z_axis = (2)
 
     imageSlice = self.imageSliceSliderWidget.value
     maskThreshold = self.maskThresholdWidget.value
     ridgeOperator = self.ridgeOperatorWidget.value
     logic.realtime(self.magnitudevolume.currentNode(), self.phasevolume.currentNode(), imageSlice, maskThreshold, ridgeOperator, self.z_axis,
-    sceneSelecter)
+    viewSelecter)
 
 
   def onApplyButton(self):
@@ -226,7 +226,7 @@ class NeedleSegmentorLogic(ScriptedLoadableModuleLogic):
       return False
     return True
 
-  def realtime(self, magnitudevolume , phasevolume, imageSlice, maskThreshold, ridgeOperator,z_axis,sceneSelecter, enableScreenshots=0):
+  def realtime(self, magnitudevolume , phasevolume, imageSlice, maskThreshold, ridgeOperator,z_axis,viewSelecter, enableScreenshots=0):
 
     #magnitude volume
     magn_imageData = magnitudevolume.GetImageData()
@@ -246,6 +246,8 @@ class NeedleSegmentorLogic(ScriptedLoadableModuleLogic):
 
 
     ## Find Slice location
+    view_selecter = slicer.mrmlScene.GetNodeByID('vtkMRMLSliceNode'+ str(viewSelecter))
+    fov_0,fov_1,fov_2 = view_selecter.GetFieldOfView()
     layoutManager = slicer.app.layoutManager()
     offsets = []
     for sliceViewName in ['Red','Yellow','Green']:
@@ -257,7 +259,6 @@ class NeedleSegmentorLogic(ScriptedLoadableModuleLogic):
     z_ras,x_ras,y_ras = offsets
 
     # Inputs
-    # volumeNode = getNode('11: AdjGre')
     markupsIndex = 0
 
     # Get point coordinate in RAS
@@ -435,7 +436,6 @@ class NeedleSegmentorLogic(ScriptedLoadableModuleLogic):
     #  fidNode1.CreateDefaultDisplayNodes()
     #  fidNode1.SetMaximumNumberOfControlPoints(1) 
 
-
     fidNode1.AddFiducialFromArray(coords)
     fidNode1.SetAndObserveTransformNodeID(transformNode.GetID())
 
@@ -445,9 +445,21 @@ class NeedleSegmentorLogic(ScriptedLoadableModuleLogic):
     delete_unwrapped = slicer.mrmlScene.GetFirstNodeByName('unwrapped_phase')
     slicer.mrmlScene.RemoveNode(delete_unwrapped)
 
-    magnitudevolume.CreateDefaultDisplayNodes()
-    conclusion = slicer.mrmlScene.GetNodeByID('vtkMRMLSliceNodeYellow')
-    conclusion.SetSliceOffset(x_ras)
+
+    ## Setting the Slice view 
+    slice_logic = slicer.app.layoutManager().sliceWidget(''+ str(viewSelecter)).sliceLogic()
+    slice_logic.GetSliceCompositeNode().SetBackgroundVolumeID(magnitudevolume.GetID())
+
+    # view_selecter = slicer.mrmlScene.GetNodeByID('vtkMRMLSliceNode'+ str(viewSelecter))
+    view_selecter.SetFieldOfView(fov_0,fov_1,fov_2)
+    if (viewSelecter == "Red"): 
+      view_selecter.SetSliceOffset(z_ras)
+    elif (viewSelecter == "Yellow"):
+      view_selecter.SetSliceOffset(x_ras)
+    elif (viewSelecter == "Green"):
+      view_selecter.SetSliceOffset(y_ras)
+      
+    
     
     # return True
 
