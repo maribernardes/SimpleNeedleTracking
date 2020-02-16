@@ -246,6 +246,8 @@ class NeedleSegmentorLogic(ScriptedLoadableModuleLogic):
 
 
     ## Find Slice location
+    #TODO: offset only gives the RAS of the center of the image, this will not for reformated images with
+    ## oblique slice views. 
     view_selecter = slicer.mrmlScene.GetNodeByID('vtkMRMLSliceNode'+ str(viewSelecter))
     fov_0,fov_1,fov_2 = view_selecter.GetFieldOfView()
     layoutManager = slicer.app.layoutManager()
@@ -257,6 +259,8 @@ class NeedleSegmentorLogic(ScriptedLoadableModuleLogic):
       offsets.append(offset)
 
     z_ras,x_ras,y_ras = offsets
+
+    print (z_ras, x_ras, y_ras)
 
     # Inputs
     markupsIndex = 0
@@ -287,6 +291,8 @@ class NeedleSegmentorLogic(ScriptedLoadableModuleLogic):
     numpy_phase = phase_array.reshape(phase_zed, phase_rows, phase_cols)
 
     slice = int(slice_number)  
+
+    print("Slice: ",slice)
     maskThreshold = int(maskThreshold)
 
     #2D Slice Selector
