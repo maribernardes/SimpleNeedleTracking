@@ -252,37 +252,40 @@ class NeedleSegmentorLogic(ScriptedLoadableModuleLogic):
     fov_0,fov_1,fov_2 = view_selecter.GetFieldOfView()
     layoutManager = slicer.app.layoutManager()
     offsets = []
-    for sliceViewName in ['Red','Yellow','Green']:
+    for sliceViewName in [''+ str(viewSelecter)]:
       sliceWidget = layoutManager.sliceWidget(sliceViewName)
       sliceWidgetLogic = sliceWidget.sliceLogic()
       offset = sliceWidgetLogic.GetSliceOffset()
+      slice_index = sliceWidgetLogic.GetSliceIndexFromOffset(offset)
+      slice_index = (slice_index - 1)
       offsets.append(offset)
 
-    z_ras,x_ras,y_ras = offsets
-
-    print (z_ras, x_ras, y_ras)
+    ##LEGACY 
+    print (slice_index)
+    # z_ras,x_ras,y_ras = offsets
+    # z_index, x_index, y_index = slice_index
 
     # Inputs
-    markupsIndex = 0
+    # markupsIndex = 0
 
-    # Get point coordinate in RAS
-    point_Ras = [x_ras, y_ras, z_ras, 1]
-    #markupsNode.GetNthFiducialWorldCoordinates(markupsIndex, point_Ras)
-    # If volume node is transformed, apply that transform to get volume's RAS coordinates
-    transformRasToVolumeRas = vtk.vtkGeneralTransform()
-    slicer.vtkMRMLTransformNode.GetTransformBetweenNodes(None, magnitudevolume.GetParentTransformNode(), transformRasToVolumeRas)
-    point_VolumeRas = transformRasToVolumeRas.TransformPoint(point_Ras[0:3])
+    # # Get point coordinate in RAS
+    # point_Ras = [x_ras, y_ras, z_ras, 1]
+    # #markupsNode.GetNthFiducialWorldCoordinates(markupsIndex, point_Ras)
+    # # If volume node is transformed, apply that transform to get volume's RAS coordinates
+    # transformRasToVolumeRas = vtk.vtkGeneralTransform()
+    # slicer.vtkMRMLTransformNode.GetTransformBetweenNodes(None, magnitudevolume.GetParentTransformNode(), transformRasToVolumeRas)
+    # point_VolumeRas = transformRasToVolumeRas.TransformPoint(point_Ras[0:3])
 
-    # Get voxel coordinates from physical coordinates
-    volumeRasToIjk = vtk.vtkMatrix4x4()
-    magnitudevolume.GetRASToIJKMatrix(volumeRasToIjk)
-    point_Ijk = [0, 0, 0, 1]
-    volumeRasToIjk.MultiplyPoint(np.append(point_VolumeRas,1.0), point_Ijk)
-    point_Ijk = [ int(round(c)) for c in point_Ijk[0:3] ]
+    # # Get voxel coordinates from physical coordinates
+    # volumeRasToIjk = vtk.vtkMatrix4x4()
+    # magnitudevolume.GetRASToIJKMatrix(volumeRasToIjk)
+    # point_Ijk = [0, 0, 0, 1]
+    # volumeRasToIjk.MultiplyPoint(np.append(point_VolumeRas,1.0), point_Ijk)
+    # point_Ijk = [ int(round(c)) for c in point_Ijk[0:3] ]
 
-    # Print output
+    # # Print output
     
-    x_ijk,y_ijk,slice_number = point_Ijk
+    # x_ijk,y_ijk,slice_number = point_Ijk
 
     #Convert vtk to numpy
     magn_array = numpy_support.vtk_to_numpy(magn_scalars)
@@ -290,15 +293,14 @@ class NeedleSegmentorLogic(ScriptedLoadableModuleLogic):
     phase_array = numpy_support.vtk_to_numpy(phase_scalars)
     numpy_phase = phase_array.reshape(phase_zed, phase_rows, phase_cols)
 
-    slice = int(slice_number)  
-
-    print("Slice: ",slice)
+    # slice = int(slice_number)  
+    # slice = (slice_index)
     maskThreshold = int(maskThreshold)
 
     #2D Slice Selector
     ### 3 3D values are : numpy_magn , numpy_phase, mask
-    numpy_magn = numpy_magn[slice,:,:]
-    numpy_phase = numpy_phase[slice,:,:]
+    numpy_magn = numpy_magn[slice_index,:,:]
+    numpy_phase = numpy_phase[slice_index,:,:]
     #mask = mask[slice,:,:]
     numpy_magn_sliced = numpy_magn.astype(np.uint8)
 
@@ -411,7 +413,7 @@ class NeedleSegmentorLogic(ScriptedLoadableModuleLogic):
     (y1,x1) = np.unravel_index(sort[0], meiji.shape) # best match
 
     point = (x1,y1)
-    coords = [x1,y1,slice]
+    coords = [x1,y1,slice_index]
     circle1 = plt.Circle(point,2,color='red')
 
     # Create MRML transform node
@@ -458,12 +460,13 @@ class NeedleSegmentorLogic(ScriptedLoadableModuleLogic):
 
     # view_selecter = slicer.mrmlScene.GetNodeByID('vtkMRMLSliceNode'+ str(viewSelecter))
     view_selecter.SetFieldOfView(fov_0,fov_1,fov_2)
-    if (viewSelecter == "Red"): 
-      view_selecter.SetSliceOffset(z_ras)
-    elif (viewSelecter == "Yellow"):
-      view_selecter.SetSliceOffset(x_ras)
-    elif (viewSelecter == "Green"):
-      view_selecter.SetSliceOffset(y_ras)
+    view_selecter.SetSliceOffset(offset)
+    # if (viewSelecter == "Red"): 
+    #   view_selecter.SetSliceOffset(z_ras)
+    # elif (viewSelecter == "Yellow"):
+    #   view_selecter.SetSliceOffset(x_ras)
+    # elif (viewSelecter == "Green"):
+    #   view_selecter.SetSliceOffset(y_ras)
       
     
     
