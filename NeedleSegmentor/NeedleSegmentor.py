@@ -261,7 +261,7 @@ class NeedleSegmentorLogic(ScriptedLoadableModuleLogic):
       offsets.append(offset)
 
     ##LEGACY 
-    print (slice_index)
+    print ("Slice Number:",slice_index)
     # z_ras,x_ras,y_ras = offsets
     # z_index, x_index, y_index = slice_index
 
