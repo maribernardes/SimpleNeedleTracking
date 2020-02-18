@@ -249,12 +249,9 @@ class NeedleSegmentorLogic(ScriptedLoadableModuleLogic):
 
 
       ## Find Slice location
-      #TODO: offset only gives the RAS of the center of the image, this will not for reformated images with
-      ## oblique slice views. 
       view_selecter = slicer.mrmlScene.GetNodeByID('vtkMRMLSliceNode'+ str(viewSelecter))
       fov_0,fov_1,fov_2 = view_selecter.GetFieldOfView()
       layoutManager = slicer.app.layoutManager()
-      offsets = []
       for sliceViewName in [''+ str(viewSelecter)]:
         sliceWidget = layoutManager.sliceWidget(sliceViewName)
         sliceWidgetLogic = sliceWidget.sliceLogic()
@@ -264,7 +261,6 @@ class NeedleSegmentorLogic(ScriptedLoadableModuleLogic):
         # offsets.append(offset)
 
       ##LEGACY 
-      print (slice_index)
       # z_ras,x_ras,y_ras = offsets
       # z_index, x_index, y_index = slice_index
 
@@ -735,8 +731,6 @@ class NeedleSegmentorLogic(ScriptedLoadableModuleLogic):
     axs[1].imshow(meiji, cmap='hsv')
     axs[1].axis('off')
     plt.savefig('mygraph.png')
-
-    #TODO: convert the numpy coorinate to a RAS coorindate (R=x, S=y) and add a fiducial of the coordinate to the world coordinate (vtk)
 
     return True
 
