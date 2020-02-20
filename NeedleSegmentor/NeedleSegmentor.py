@@ -447,7 +447,11 @@ class NeedleSegmentorLogic(ScriptedLoadableModuleLogic):
     fidNode1.AddFiducialFromArray(coords)
     fidNode1.SetAndObserveTransformNodeID(transformNode.GetID())
 
-    ###TODO: dont delete the volume after use. create a checkpoint to update on only one volume
+    
+
+
+
+###TODO: dont delete the volume after use. create a checkpoint to update on only one volume
     delete_wrapped = slicer.mrmlScene.GetFirstNodeByName('phase_cropped')
     slicer.mrmlScene.RemoveNode(delete_wrapped)
     delete_unwrapped = slicer.mrmlScene.GetFirstNodeByName('unwrapped_phase')
@@ -467,9 +471,19 @@ class NeedleSegmentorLogic(ScriptedLoadableModuleLogic):
     #   view_selecter.SetSliceOffset(x_ras)
     # elif (viewSelecter == "Green"):
     #   view_selecter.SetSliceOffset(y_ras)
-      
-    
-    
+#      
+#    
+#    fig, axs = plt.subplots(1,2)
+#    fig.suptitle('Needle Tracking')
+#    axs[0].imshow(numpy_magn, cmap='gray')
+#    axs[0].set_title('Magnitude + Tracked')
+#    axs[0].add_artist(circle1)
+#    axs[0].axis('off')
+#    axs[1].set_title('Processed Image')
+#    axs[1].imshow(meiji, cmap='hsv')
+#    axs[1].axis('off')
+#    plt.savefig('mygraph.png')
+#    
     # return True
 
   def run(self, magnitudevolume , phasevolume, imageSlice, maskThreshold, ridgeOperator,z_axis,sceneSelecter, enableScreenshots=0):
