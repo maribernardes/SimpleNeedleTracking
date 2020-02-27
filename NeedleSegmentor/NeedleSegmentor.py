@@ -136,13 +136,25 @@ class NeedleSegmentorWidget(ScriptedLoadableModuleWidget):
     layout.addWidget(self.sceneViewButton_green)
     parametersFormLayout.addRow("Scene view:",layout)
 
+    self.lastMatrix = slicer.mrmlScene.GetNodeByID('vtkMRMLSliceNodeGreen').GetXYToRAS() 
+
+
     #   
     # Real-Time Tracking 
     #
-    self.trackingButton = qt.QPushButton("Real-Time Tracking")
-    self.trackingButton.toolTip = "Observe slice from red scene viewer"
+    self.trackingButton = qt.QPushButton("Start Real-Time Tracking")
+    self.trackingButton.toolTip = "Observe slice from scene viewer"
     self.trackingButton.enabled = False
+    self.trackingButton.clicked.connect(self.StartTimer)
     parametersFormLayout.addRow(self.trackingButton)
+
+    self.timer = qt.QTimer()
+    self.timer.timeout.connect(self.onRealTimeTracking)
+
+    # Pause
+    self.stopsequence = qt.QPushButton('Stop Realtime Tracking')
+    self.stopsequence.clicked.connect(self.StopTimer)
+    parametersFormLayout.addRow(self.stopsequence)
 
 
     #
@@ -172,6 +184,9 @@ class NeedleSegmentorWidget(ScriptedLoadableModuleWidget):
   def StartTimer(self):
     self.timer.start(int(1000/int(30)))
     self.counter = 0
+
+  def StopTimer (self):
+    self.timer.stop()
     
   def cleanup(self):
     pass
@@ -186,22 +201,19 @@ class NeedleSegmentorWidget(ScriptedLoadableModuleWidget):
     enableScreenshotsFlag = self.enableScreenshotsFlagCheckBox.checked
     if (self.sceneViewButton_red.checked == True):
       viewSelecter = ("Red")
-      # scene_viewer = slicer.mrmlScene.GetNodesByID("vtkMRMLSliceNodeRed")
       self.z_axis = (0)
     elif (self.sceneViewButton_yellow.checked ==True):
       viewSelecter = ("Yellow")
-      # scene_viewer = slicer.mrmlScene.GetNodesByID("vtkMRMLSliceNodeYellow")
       self.z_axis = 1
     elif (self.sceneViewButton_green.checked ==True):
       viewSelecter = ("Green")
-      # scene_viewer = slicer.mrmlScene.GetNodesByID("vtkMRMLSliceNodeGreen")
       self.z_axis = (2)
-
+    
     imageSlice = self.imageSliceSliderWidget.value
     maskThreshold = self.maskThresholdWidget.value
     ridgeOperator = self.ridgeOperatorWidget.value
     logic.realtime(self.magnitudevolume.currentNode(), self.phasevolume.currentNode(), imageSlice, maskThreshold, ridgeOperator, self.z_axis,
-    viewSelecter)
+    viewSelecter, self.lastMatrix, self.counter)
 
 
   def onApplyButton(self):
@@ -228,9 +240,12 @@ class NeedleSegmentorLogic(ScriptedLoadableModuleLogic):
     return True
 
 
-  def realtime(self, magnitudevolume , phasevolume, imageSlice, maskThreshold, ridgeOperator,z_axis,viewSelecter):
+  def realtime(self, magnitudevolume , phasevolume, imageSlice, maskThreshold, ridgeOperator,z_axis,viewSelecter, lastMatrix, counter):
 
-    def process(caller, event):
+    transform1 = slicer.mrmlScene.GetNodeByID('vtkMRMLSliceNode'+ str(viewSelecter)).GetXYToRAS()
+
+    if (not self.CompareMatrices(lastMatrix, transform1) or counter >= 0):
+      
       #magnitude volume
       magn_imageData = magnitudevolume.GetImageData()
       magn_rows, magn_cols, magn_zed = magn_imageData.GetDimensions()
@@ -259,32 +274,6 @@ class NeedleSegmentorLogic(ScriptedLoadableModuleLogic):
         slice_index = sliceWidgetLogic.GetSliceIndexFromOffset(offset)
         slice_index = (slice_index - 1)
         # offsets.append(offset)
-
-      ##LEGACY 
-      # z_ras,x_ras,y_ras = offsets
-      # z_index, x_index, y_index = slice_index
-
-      # Inputs
-      # markupsIndex = 0
-
-      # # Get point coordinate in RAS
-      # point_Ras = [x_ras, y_ras, z_ras, 1]
-      # #markupsNode.GetNthFiducialWorldCoordinates(markupsIndex, point_Ras)
-      # # If volume node is transformed, apply that transform to get volume's RAS coordinates
-      # transformRasToVolumeRas = vtk.vtkGeneralTransform()
-      # slicer.vtkMRMLTransformNode.GetTransformBetweenNodes(None, magnitudevolume.GetParentTransformNode(), transformRasToVolumeRas)
-      # point_VolumeRas = transformRasToVolumeRas.TransformPoint(point_Ras[0:3])
-
-      # # Get voxel coordinates from physical coordinates
-      # volumeRasToIjk = vtk.vtkMatrix4x4()
-      # magnitudevolume.GetRASToIJKMatrix(volumeRasToIjk)
-      # point_Ijk = [0, 0, 0, 1]
-      # volumeRasToIjk.MultiplyPoint(np.append(point_VolumeRas,1.0), point_Ijk)
-      # point_Ijk = [ int(round(c)) for c in point_Ijk[0:3] ]
-
-      # # Print output
-      
-      # x_ijk,y_ijk,slice_number = point_Ijk
 
       #Convert vtk to numpy
       magn_array = numpy_support.vtk_to_numpy(magn_scalars)
@@ -466,21 +455,25 @@ class NeedleSegmentorLogic(ScriptedLoadableModuleLogic):
       #   view_selecter.SetSliceOffset(x_ras)
       # elif (viewSelecter == "Green"):
       #   view_selecter.SetSliceOffset(y_ras)
-        
+      
+      self.lastMatrix = view_selecter.GetXYToRAS()
+      self.counter = 0
       
       
       return True
 
+    else:
+      counter = counter + 1
 
-    maskThreshold = int(maskThreshold)
-    ridgeOperator = int(ridgeOperator)
-    print ('mask threshold:', maskThreshold)
-    sliceNode = slicer.mrmlScene.GetNodeByID("vtkMRMLSliceNode%s" % viewSelecter)
-    sliceNode.AddObserver(vtk.vtkCommand.ModifiedEvent, process)
 
-    with NodeModify(sliceNode):
-      sliceNode.SetSliceOffset(sliceNode.GetSliceOffset() + 3)
-  
+  def CompareMatrices(self, transform1, n):
+    for i in range(0,4):
+      for j in range(0,4):
+        if transform1.GetElement(i,j) != n.GetElement(i,j):
+          return False
+    return True
+
+
   def run(self, magnitudevolume , phasevolume, imageSlice, maskThreshold, ridgeOperator,z_axis,sceneSelecter, enableScreenshots=0):
 
     #magnitude volume
