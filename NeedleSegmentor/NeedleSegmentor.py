@@ -768,7 +768,7 @@ class NeedleSegmentorLogic(ScriptedLoadableModuleLogic):
     #   view_selecter.SetSliceOffset(x_ras)
     # elif (viewSelecter == "Green"):
     #   view_selecter.SetSliceOffset(y_ras)
-<<<<<<< HEAD
+
 #      
 #    
 #    fig, axs = plt.subplots(1,2)
@@ -783,8 +783,8 @@ class NeedleSegmentorLogic(ScriptedLoadableModuleLogic):
 #    plt.savefig('mygraph.png')
 #    
     # return True
-=======
->>>>>>> exp
+
+
 
   def run(self, magnitudevolume , phasevolume, imageSlice, maskThreshold, ridgeOperator,z_axis, enableScreenshots=0):
 
