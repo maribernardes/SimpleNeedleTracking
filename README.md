@@ -14,4 +14,4 @@ github.com/tokjun/PhaseUnwrapping
 
 4. Select the magnitude and phase image of the desired volume and select which slice to preform the algorithim on. 
 
-5. Use the realtime to auto update the needle tip position from the selected node viewer. (exp branch)
+5. Use the realtime to auto update the needle tip position from the selected node viewer 

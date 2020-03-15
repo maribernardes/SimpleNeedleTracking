@@ -508,7 +508,7 @@ class NeedleSegmentorLogic(ScriptedLoadableModuleLogic):
       
       # self.lastMatrix = view_selecter.GetXYToRAS()
       self.counter = 0
-      matrix.DeepCopy(inputransform)
+      lastMatrix.DeepCopy(inputransform)
       return True
    
     else: 
