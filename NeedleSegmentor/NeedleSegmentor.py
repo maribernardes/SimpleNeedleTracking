@@ -38,7 +38,6 @@ class NeedleSegmentorWidget(ScriptedLoadableModuleWidget):
     parametersCollapsibleButton = ctk.ctkCollapsibleButton()
     parametersCollapsibleButton.text = "Parameters"
     self.layout.addWidget(parametersCollapsibleButton)
-
     # Layout within the dummy collapsible button
     parametersFormLayout = qt.QFormLayout(parametersCollapsibleButton)
 
@@ -150,6 +149,7 @@ class NeedleSegmentorWidget(ScriptedLoadableModuleWidget):
     self.autosliceselecterButton.enabled = False
     parametersFormLayout.addRow(self.autosliceselecterButton)
 
+    realtimebutton = qt.QHBoxLayout()    
     #   
     # Start Real-Time Tracking 
     #
@@ -157,7 +157,7 @@ class NeedleSegmentorWidget(ScriptedLoadableModuleWidget):
     self.trackingButton.toolTip = "Observe slice from scene viewer"
     self.trackingButton.enabled = False
     self.trackingButton.clicked.connect(self.StartTimer)
-    parametersFormLayout.addRow(self.trackingButton)
+    realtimebutton.addWidget(self.trackingButton)
 
     self.timer = qt.QTimer()
     self.timer.timeout.connect(self.onRealTimeTracking)
@@ -165,7 +165,10 @@ class NeedleSegmentorWidget(ScriptedLoadableModuleWidget):
     # Stop Real-Time Tracking
     self.stopsequence = qt.QPushButton('Stop Realtime Tracking')
     self.stopsequence.clicked.connect(self.StopTimer)
-    parametersFormLayout.addRow(self.stopsequence)
+    realtimebutton.addWidget(self.stopsequence)
+
+    parametersFormLayout.addRow("", realtimebutton)
+
 
 
     # Add vertical spacer
@@ -195,7 +198,7 @@ class NeedleSegmentorWidget(ScriptedLoadableModuleWidget):
 
     
     #
-    # Apply Button
+    # Manual apply Button
     #
     self.applyButton = qt.QPushButton("Manual")
     self.applyButton.toolTip = "Select slice manually"
@@ -204,6 +207,14 @@ class NeedleSegmentorWidget(ScriptedLoadableModuleWidget):
 
     # Refresh Apply button state
     self.onSelect()
+
+    #
+    # check box to trigger preview final processed image
+    #
+    self.enableprocessedimagecheckbox = qt.QCheckBox()
+    self.enableprocessedimagecheckbox.checked = 0
+    self.enableprocessedimagecheckbox.setToolTip("If checked, take screen shots for tutorials. Use Save Data to write them to disk.")
+    advancedFormLayout.addRow("Enable Processed Image", self.enableprocessedimagecheckbox)
 
     # connections
     self.applyButton.connect('clicked(bool)', self.onApplyButton)
@@ -233,6 +244,9 @@ class NeedleSegmentorWidget(ScriptedLoadableModuleWidget):
 
   def autosliceselecter (self):
     logic = NeedleSegmentorLogic()
+    enableProcessedFlag = self.enableprocessedimagecheckbox.checked
+    if (enableProcessedFlag==True):
+      enablenumber = 1
     enableScreenshotsFlag = self.enableScreenshotsFlagCheckBox.checked
     if (self.sceneViewButton_red.checked == True):
       viewSelecter = ("Red")
@@ -525,6 +539,7 @@ class NeedleSegmentorLogic(ScriptedLoadableModuleLogic):
 
   def needlefinder(self, magnitudevolume , phasevolume, imageSlice, maskThreshold, ridgeOperator,z_axis,viewSelecter, enableScreenshots=0):
 
+    #print ("THis is the processed image flag", enableProcessedFlag)
     #magnitude volume
     magn_imageData = magnitudevolume.GetImageData()
     magn_rows, magn_cols, magn_zed = magn_imageData.GetDimensions()
@@ -768,22 +783,6 @@ class NeedleSegmentorLogic(ScriptedLoadableModuleLogic):
     #   view_selecter.SetSliceOffset(x_ras)
     # elif (viewSelecter == "Green"):
     #   view_selecter.SetSliceOffset(y_ras)
-
-#      
-#    
-#    fig, axs = plt.subplots(1,2)
-#    fig.suptitle('Needle Tracking')
-#    axs[0].imshow(numpy_magn, cmap='gray')
-#    axs[0].set_title('Magnitude + Tracked')
-#    axs[0].add_artist(circle1)
-#    axs[0].axis('off')
-#    axs[1].set_title('Processed Image')
-#    axs[1].imshow(meiji, cmap='hsv')
-#    axs[1].axis('off')
-#    plt.savefig('mygraph.png')
-#    
-    # return True
-
 
 
   def run(self, magnitudevolume , phasevolume, imageSlice, maskThreshold, ridgeOperator,z_axis, enableScreenshots=0):
