@@ -133,12 +133,12 @@ class NeedleSegmentorWidget(ScriptedLoadableModuleWidget):
 
     
     # FPS 
-    self.fpsBox = qt.QSpinBox()
-    self.fpsBox.setSingleStep(1)
-    self.fpsBox.setMaximum(144)
-    self.fpsBox.setMinimum(1)
+    self.fpsBox = qt.QDoubleSpinBox()
+    self.fpsBox.setSingleStep(0.1)
+    self.fpsBox.setMaximum(40)
+    self.fpsBox.setMinimum(0.1)
     self.fpsBox.setSuffix(" FPS")
-    self.fpsBox.value = 5
+    self.fpsBox.value = 0.5
     SRCFormLayout.addRow("Update Rate:", self.fpsBox)
 
 
@@ -250,7 +250,7 @@ class NeedleSegmentorWidget(ScriptedLoadableModuleWidget):
     self.timer.timeout.connect(self.SRCRealTimeTracking) 
 
   def StartTimer(self):
-    self.timer.start(int(1000/0.5))
+    self.timer.start(int(1000/float(self.fpsBox.value)))
     self.counter = 0
 
   def StopTimer (self):
