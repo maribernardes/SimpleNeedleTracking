@@ -1,4 +1,3 @@
-##adding real time needle tracking
 import os
 import unittest
 import vtk, qt, ctk, slicer
@@ -9,7 +8,7 @@ import numpy as np
 from vtk.util import numpy_support
 import matplotlib.pyplot as plt
 from scipy import ndimage
-from skimage.filters import meijering, frangi, sato
+from skimage.filters import meijering, sato
 import cv2
 import tempfile
 
@@ -70,71 +69,16 @@ class NeedleSegmentorWidget(ScriptedLoadableModuleWidget):
     self.phasevolume.setMRMLScene( slicer.mrmlScene )
     self.phasevolume.setToolTip("Select the phase image")
     parametersFormLayout.addRow("Phase Image: ", self.phasevolume)
-
-    #
-    # 2D slice value
-    #
-    self.imageSliceSliderWidget = ctk.ctkSliderWidget()
-    self.imageSliceSliderWidget.singleStep = 1
-    self.imageSliceSliderWidget.minimum = 0
-    self.imageSliceSliderWidget.maximum = 70
-    self.imageSliceSliderWidget.value = 1
-    self.imageSliceSliderWidget.setToolTip("Select 2D slice")
-    parametersFormLayout.addRow("2D Slice ", self.imageSliceSliderWidget)
-
-    #
-    # Mask Threshold
-    #
-    self.maskThresholdWidget = ctk.ctkSliderWidget()
-    self.maskThresholdWidget.singleStep = 1
-    self.maskThresholdWidget.minimum = 0
-    self.maskThresholdWidget.maximum = 100
-    self.maskThresholdWidget.value = 20
-    self.maskThresholdWidget.setToolTip("Set threshold value for computing the output image. Voxels that have intensities lower than this value will set to zero.")
-    parametersFormLayout.addRow("Mask Threshold ", self.maskThresholdWidget)
-
-    #
-    # Ridge operator filter
-    #
-    self.ridgeOperatorWidget = ctk.ctkSliderWidget()
-    self.ridgeOperatorWidget.singleStep = 1
-    self.ridgeOperatorWidget.minimum = 0
-    self.ridgeOperatorWidget.maximum = 100
-    self.ridgeOperatorWidget.value = 5
-    self.ridgeOperatorWidget.setToolTip("set up meijering filter threshold")
-    parametersFormLayout.addRow("Ridge Operator Threshold", self.ridgeOperatorWidget)
-
-    #
-    # FPS 
-    #
-    self.fpsBox = qt.QSpinBox()
-    self.fpsBox.setSingleStep(1)
-    self.fpsBox.setMaximum(144)
-    self.fpsBox.setMinimum(1)
-    self.fpsBox.setSuffix(" FPS")
-    self.fpsBox.value = 30
-    parametersFormLayout.addRow("Update Rate:", self.fpsBox)
-
-    #
-    # check box to trigger taking screen shots for later use in tutorials
-    #
-    self.enableScreenshotsFlagCheckBox = qt.QCheckBox()
-    self.enableScreenshotsFlagCheckBox.checked = 0
-    self.enableScreenshotsFlagCheckBox.setToolTip("If checked, take screen shots for tutorials. Use Save Data to write them to disk.")
-    parametersFormLayout.addRow("Enable Screenshots", self.enableScreenshotsFlagCheckBox)
-
+   
     #
     # Select which scene view to track
     #
     self.sceneViewButton_red = qt.QRadioButton('Red')
-    self.sceneViewButton_red.setFixedWidth(120)
 
     self.sceneViewButton_yellow = qt.QRadioButton('Yellow')
-    self.sceneViewButton_yellow.setFixedWidth(120)
 
     self.sceneViewButton_green = qt.QRadioButton('Green')
     self.sceneViewButton_green.checked = 1
-    self.sceneViewButton_green.setFixedWidth(120)
 
     
     layout = qt.QHBoxLayout(parametersCollapsibleButton)
@@ -150,6 +94,7 @@ class NeedleSegmentorWidget(ScriptedLoadableModuleWidget):
     parametersFormLayout.addRow(self.autosliceselecterButton)
 
     realtimebutton = qt.QHBoxLayout()    
+     
     #   
     # Start Real-Time Tracking 
     #
@@ -159,32 +104,77 @@ class NeedleSegmentorWidget(ScriptedLoadableModuleWidget):
     self.trackingButton.clicked.connect(self.StartTimer)
     realtimebutton.addWidget(self.trackingButton)
 
-    self.timer = qt.QTimer()
-    self.timer.timeout.connect(self.onRealTimeTracking)
+#    self.timer = qt.QTimer()
+#   self.timer.timeout.connect(self.SRCRealTimeTracking)
 
     # Stop Real-Time Tracking
     self.stopsequence = qt.QPushButton('Stop Realtime Tracking')
     self.stopsequence.clicked.connect(self.StopTimer)
     realtimebutton.addWidget(self.stopsequence)
-
+     
     parametersFormLayout.addRow("", realtimebutton)
-
 
 
     # Add vertical spacer
     self.layout.addStretch(1)
 
+    ####################################
+    ##                                ##
+    ## Scanner Remote Control Protocol##
+    ##                                ##
+    ####################################
 
-    #
-    # Advanced Parameters
-    #
+    SRCcollapsibleButton = ctk.ctkCollapsibleButton()
+    SRCcollapsibleButton.text =  "Scanner Remote Control Protocol"
+    self.layout.addWidget(SRCcollapsibleButton)
+    SRCFormLayout = qt.QFormLayout(SRCcollapsibleButton)
+    
+    realtimebutton = qt.QHBoxLayout()    
+
+    
+    # FPS 
+    self.fpsBox = qt.QSpinBox()
+    self.fpsBox.setSingleStep(1)
+    self.fpsBox.setMaximum(144)
+    self.fpsBox.setMinimum(1)
+    self.fpsBox.setSuffix(" FPS")
+    self.fpsBox.value = 5
+    SRCFormLayout.addRow("Update Rate:", self.fpsBox)
+
+
+    # Start SRC Real-Time Tracking 
+    self.SRCtrackingButton = qt.QPushButton("Start Live Tracking")
+    self.SRCtrackingButton.toolTip = "Observe slice from scene viewer"
+    self.SRCtrackingButton.enabled = False
+    self.SRCtrackingButton.clicked.connect(self.StartTimer)
+    realtimebutton.addWidget(self.SRCtrackingButton)
+
+    self.timer = qt.QTimer()
+    self.timer.timeout.connect(self.SRCRealTimeTracking)
+
+    # Stop Real-Time Tracking
+    self.stopsequence = qt.QPushButton('Stop Live Tracking')
+    self.stopsequence.clicked.connect(self.StopTimer)
+    realtimebutton.addWidget(self.stopsequence)
+     
+    SRCFormLayout.addRow("", realtimebutton)
+
+
+    # Add vertical spacer
+    self.layout.addStretch(1)
+
+    ######################
+    # Advanced Parameters#
+    ######################
+
     advancedCollapsibleButton = ctk.ctkCollapsibleButton()
     advancedCollapsibleButton.text = "Advanced"
+    advancedCollapsibleButton.collapsed=1
     self.layout.addWidget(advancedCollapsibleButton)
-
-    # Layout within the dummy collapsible button
+    
+    # Layout within the collapsible button
     advancedFormLayout = qt.QFormLayout(advancedCollapsibleButton)
-
+    
     #
     # 2D slice value
     #
@@ -195,7 +185,38 @@ class NeedleSegmentorWidget(ScriptedLoadableModuleWidget):
     self.imageSliceSliderWidget.value = 1
     self.imageSliceSliderWidget.setToolTip("Select 2D slice")
     advancedFormLayout.addRow("2D Slice ", self.imageSliceSliderWidget)
+       
+    #
+    # Mask Threshold
+    #
+    self.maskThresholdWidget = ctk.ctkSliderWidget()
+    self.maskThresholdWidget.singleStep = 1
+    self.maskThresholdWidget.minimum = 0
+    self.maskThresholdWidget.maximum = 100
+    self.maskThresholdWidget.value = 20
+    self.maskThresholdWidget.setToolTip("Set threshold value for computing the output image. Voxels that have intensities lower than this value will set to zero.")
+    advancedFormLayout.addRow("Mask Threshold ", self.maskThresholdWidget)
 
+    #
+    # Ridge operator filter
+    #
+    self.ridgeOperatorWidget = ctk.ctkSliderWidget()
+    self.ridgeOperatorWidget.singleStep = 1
+    self.ridgeOperatorWidget.minimum = 0
+    self.ridgeOperatorWidget.maximum = 100
+    self.ridgeOperatorWidget.value = 5
+    self.ridgeOperatorWidget.setToolTip("set up meijering filter threshold")
+    advancedFormLayout.addRow("Ridge Operator Threshold", self.ridgeOperatorWidget)
+
+    #
+    # check box to trigger taking screen shots for later use in tutorials
+    #
+    self.enableScreenshotsFlagCheckBox = qt.QCheckBox()
+    self.enableScreenshotsFlagCheckBox.checked = 0
+    self.enableScreenshotsFlagCheckBox.setToolTip("If checked, take screen shots for tutorials. Use Save Data to write them to disk.")
+    parametersFormLayout.addRow("Enable Screenshots", self.enableScreenshotsFlagCheckBox)
+
+ 
     
     #
     # Manual apply Button
@@ -219,21 +240,23 @@ class NeedleSegmentorWidget(ScriptedLoadableModuleWidget):
     # connections
     self.applyButton.connect('clicked(bool)', self.onApplyButton)
     self.trackingButton.connect('clicked(bool)', self.onRealTimeTracking)
+    self.SRCtrackingButton.connect('clicked(bool)', self.SRCRealTimeTracking)
     self.autosliceselecterButton.connect('clicked(bool)', self.autosliceselecter)
     self.magnitudevolume.connect("currentNodeChanged(vtkMRMLNode*)", self.onSelect)
     self.phasevolume.connect("currentNodeChanged(vtkMRMLNode*)", self.onSelect)
     self.lastMatrix = vtk.vtkMatrix4x4()
     self.timer = qt.QTimer()
-    self.timer.timeout.connect(self.onRealTimeTracking)
-
+#    self.timer.timeout.connect(self.onRealTimeTracking)
+    self.timer.timeout.connect(self.SRCRealTimeTracking) 
 
   def StartTimer(self):
-    self.timer.start(int(1000/int(self.fpsBox.value)))
+    self.timer.start(int(1000/0.5))
     self.counter = 0
 
   def StopTimer (self):
     self.timer.stop()
-    
+    print ("Stopped realtime tracking ...")
+
   def cleanup(self):
     pass
 
@@ -241,6 +264,7 @@ class NeedleSegmentorWidget(ScriptedLoadableModuleWidget):
     self.applyButton.enabled = self.magnitudevolume.currentNode() and self.phasevolume.currentNode()
     self.trackingButton.enabled = self.magnitudevolume.currentNode() and self.phasevolume.currentNode()
     self.autosliceselecterButton.enabled = self.magnitudevolume.currentNode() and self.phasevolume.currentNode()
+    self.SRCtrackingButton.enabled = self.magnitudevolume.currentNode() and self.phasevolume.currentNode()
 
   def autosliceselecter (self):
     logic = NeedleSegmentorLogic()
@@ -284,6 +308,23 @@ class NeedleSegmentorWidget(ScriptedLoadableModuleWidget):
     logic.realtime(self.magnitudevolume.currentNode(), self.phasevolume.currentNode(), imageSlice, maskThreshold, ridgeOperator, self.z_axis,
     viewSelecter, self.counter, self.lastMatrix)
 
+  def SRCRealTimeTracking(self):
+  #set observer node so that i can the image as it updates
+    self.counter = 0
+    logic = NeedleSegmentorLogic()
+    if (self.sceneViewButton_red.checked == True):
+      viewSelecter = ("Red")
+      self.z_axis = (0)
+    elif (self.sceneViewButton_yellow.checked ==True):
+      viewSelecter = ("Yellow")
+      self.z_axis = 1
+    elif (self.sceneViewButton_green.checked ==True):
+      viewSelecter = ("Green")
+      self.z_axis = (2)    
+      maskThreshold = self.maskThresholdWidget.value
+      ridgeOperator = self.ridgeOperatorWidget.value
+      logic.SRCrealtime(self.magnitudevolume.currentNode(), self.phasevolume.currentNode(), maskThreshold, ridgeOperator,self.z_axis,
+              viewSelecter, self.counter)
 
   def onApplyButton(self):
     logic = NeedleSegmentorLogic()
@@ -307,6 +348,232 @@ class NeedleSegmentorLogic(ScriptedLoadableModuleLogic):
       logging.debug('hasImageData failed: no image data in volume node')
       return False
     return True
+
+  def SRCrealtime(self, magnitudevolume , phasevolume, maskThreshold, ridgeOperator,z_axis,viewSelecter, counter):
+
+    ## Counter is disabled for current use, only updates when slice view changes
+#      inputransform = slicer.mrmlScene.GetNodeByID('vtkMRMLSliceNode'+ str(viewSelecter)).GetXYToRAS()
+
+    # if (not self.CompareMatrices(lastMatrix, inputransform) or counter >= 20) :
+     
+      #magnitude volume
+      magn_imageData = magnitudevolume.GetImageData()
+      magn_rows, magn_cols, magn_zed = magn_imageData.GetDimensions()
+      magn_scalars = magn_imageData.GetPointData().GetScalars()
+      magn_imageOrigin = magnitudevolume.GetOrigin()
+      magn_imageSpacing = magnitudevolume.GetSpacing()
+      magn_matrix = vtk.vtkMatrix4x4()
+      magnitudevolume.GetIJKToRASMatrix(magn_matrix)
+      # magnitudevolume.CreateDefaultDisplayNodes()
+
+
+      # phase volume
+      phase_imageData = phasevolume.GetImageData()
+      phase_rows, phase_cols, phase_zed = phase_imageData.GetDimensions()
+      phase_scalars = phase_imageData.GetPointData().GetScalars()
+
+
+      ## Find Slice location
+      view_selecter = slicer.mrmlScene.GetNodeByID('vtkMRMLSliceNode'+ str(viewSelecter))
+      fov_0,fov_1,fov_2 = view_selecter.GetFieldOfView()
+      layoutManager = slicer.app.layoutManager()
+      for sliceViewName in [''+ str(viewSelecter)]:
+        sliceWidget = layoutManager.sliceWidget(sliceViewName)
+        sliceWidgetLogic = sliceWidget.sliceLogic()
+        offset = sliceWidgetLogic.GetSliceOffset()
+        slice_index = sliceWidgetLogic.GetSliceIndexFromOffset(offset)
+        slice_index = (slice_index - 1)
+        # offsets.append(offset)
+
+      #Convert vtk to numpy
+      magn_array = numpy_support.vtk_to_numpy(magn_scalars)
+      numpy_magn = magn_array.reshape(magn_zed, magn_rows, magn_cols)
+      phase_array = numpy_support.vtk_to_numpy(phase_scalars)
+      numpy_phase = phase_array.reshape(phase_zed, phase_rows, phase_cols)
+
+      # slice = int(slice_number)  
+      # slice = (slice_index)
+      # maskThreshold = int(maskThreshold)
+
+      #2D Slice Selector
+      ### 3 3D values are : numpy_magn , numpy_phase, mask
+      numpy_magn = numpy_magn[slice_index,:,:]
+      numpy_phase = numpy_phase[slice_index,:,:]
+      #mask = mask[slice,:,:]
+      numpy_magn_sliced = numpy_magn.astype(np.uint8)
+
+      #mask thresholding 
+      img = cv2.pyrDown(numpy_magn_sliced)
+      _, threshed = cv2.threshold(numpy_magn_sliced, maskThreshold, 255, cv2.THRESH_BINARY)
+      contours,_ = cv2.findContours(threshed, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+
+      #find maximum contour and draw   
+      cmax = max(contours, key = cv2.contourArea) 
+      epsilon = 0.002 * cv2.arcLength(cmax, True)
+      approx = cv2.approxPolyDP(cmax, epsilon, True)
+      cv2.drawContours(numpy_magn_sliced, [approx], -1, (0, 255, 0), 3)
+
+      width, height = numpy_magn_sliced.shape
+
+      #fill maximum contour and draw   
+      mask = np.zeros( [width, height, 3],dtype=np.uint8 )
+      cv2.fillPoly(mask, pts =[cmax], color=(255,255,255))
+      mask = mask[:,:,0]
+
+      #phase_cropped
+      phase_cropped = cv2.bitwise_and(numpy_phase, numpy_phase, mask=mask)
+      phase_cropped =  np.expand_dims(phase_cropped, axis=0)
+
+
+
+      node = slicer.vtkMRMLScalarVolumeNode()
+      node.SetName('phase_cropped')
+      slicer.mrmlScene.AddNode(node)
+
+      slicer.util.updateVolumeFromArray(node, phase_cropped)
+      node.SetOrigin(magn_imageOrigin)
+      node.SetSpacing(magn_imageSpacing)
+      node.SetIJKToRASDirectionMatrix(magn_matrix)
+
+
+      unwrapped_phase = slicer.vtkMRMLScalarVolumeNode()
+      unwrapped_phase.SetName('unwrapped_phase')
+      slicer.mrmlScene.AddNode(unwrapped_phase)
+
+
+      #
+      # Run phase unwrapping module
+      #
+      cli_input = slicer.util.getFirstNodeByName('phase_cropped')
+      cli_output = slicer.util.getNode('unwrapped_phase')
+      cli_params = {'inputVolume': cli_input, 'outputVolume': cli_output}
+      slicer.cli.runSync(slicer.modules.phaseunwrapping, None, cli_params)
+
+
+      pu_imageData = unwrapped_phase.GetImageData()
+      pu_rows, pu_cols, pu_zed = pu_imageData.GetDimensions()
+      pu_scalars = pu_imageData.GetPointData().GetScalars()
+      pu_NumpyArray = numpy_support.vtk_to_numpy(pu_scalars)
+      phaseunwrapped = pu_NumpyArray.reshape(pu_zed, pu_rows, pu_cols)
+
+
+      I = phaseunwrapped.squeeze()
+      A = np.fft.fft2(I)
+      A1 = np.fft.fftshift(A)
+
+      # Image size
+      [M, N] = A.shape
+
+      # filter size parameter
+      R = 10
+
+      X = np.arange(0, N, 1)
+      Y = np.arange(0, M, 1)
+
+      [X, Y] = np.meshgrid(X, Y)
+      Cx = 0.5 * N
+      Cy = 0.5 * M
+      Lo = np.exp(-(((X - Cx) ** 2) + ((Y - Cy) ** 2)) / ((2 * R) ** 2))
+      Hi = 1 - Lo
+
+      J = A1 * Lo
+      J1 = np.fft.ifftshift(J)
+      B1 = np.fft.ifft2(J1)
+
+      K = A1 * Hi
+      K1 = np.fft.ifftshift(K)
+      B2 = np.fft.ifft2(K1)
+      B2 = np.real(B2)
+
+      #Remove border  for false positive
+      border_size = 20
+      top, bottom, left, right = [border_size] * 4
+      mask_borderless = cv2.copyMakeBorder(mask, top, bottom, left, right, cv2.BORDER_CONSTANT, (0, 0, 0))
+      
+      kernel = np.ones((5, 5), np.uint8)
+      mask_borderless = cv2.erode(mask_borderless, kernel, iterations=2)
+      mask_borderless = ndimage.binary_fill_holes(mask_borderless).astype(np.uint8)
+      x, y = mask_borderless.shape
+      mask_borderless = mask_borderless[0 + border_size:y - border_size, 0 + border_size:x - border_size]
+
+      B2 = cv2.bitwise_and(B2, B2, mask=mask_borderless)
+
+      # ridgeOperator = int(ridgeOperator)
+      meiji = sato(B2, sigmas=(ridgeOperator, ridgeOperator), black_ridges=True)
+
+      #(minVal, maxVal, minLoc, maxLoc) = cv2.minMaxLoc(meiji)
+      
+      result2 = np.reshape(meiji, meiji.shape[0]*meiji.shape[1])
+      
+      ids = np.argpartition(result2, -51)[-51:]
+      sort = ids[np.argsort(result2[ids])[::-1]]
+      
+      (y1,x1) = np.unravel_index(sort[0], meiji.shape) # best match
+
+      point = (x1,y1)
+      coords = [x1,y1,slice_index]
+      circle1 = plt.Circle(point,2,color='red')
+
+      # Create MRML transform node
+      
+      transforms = slicer.mrmlScene.GetNodesByClassByName('vtkMRMLLinearTransformNode','Transform')
+      nbTransforms = transforms.GetNumberOfItems()
+      if (nbTransforms >= 1): 
+        for i in range(nbTransforms):
+          transformNode = slicer.util.getNode('Transform')
+          transformNode.SetAndObserveMatrixTransformToParent(magn_matrix)
+
+      else:
+        # transformNode = slicer.mrmlScene.CreateNodeByClass ('vtkMRMLAnnotationFiducialNode')
+        transformNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLLinearTransformNode')
+        transformNode.SetName("Transform")
+        transformNode.SetAndObserveMatrixTransformToParent(magn_matrix)
+
+      # Fiducial Creation
+      nodes = slicer.mrmlScene.GetNodesByClass('vtkMRMLMarkupsFiducialNode')
+      nbNodes = nodes.GetNumberOfItems()
+      if (nbNodes >= 1): 
+        for i in range(nbNodes):
+          fidNode1 = slicer.util.getNode('needle_tip')
+          ## to view mutiple fiducial comment the line below
+          fidNode1.RemoveAllMarkups()
+      else:
+        fidNode1 = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode", "needle_tip")
+      #  fidNode1.CreateDefaultDisplayNodes()
+      #  fidNode1.SetMaximumNumberOfControlPoints(1) 
+
+      fidNode1.AddFiducialFromArray(coords)
+      fidNode1.SetAndObserveTransformNodeID(transformNode.GetID())
+
+      ###TODO: dont delete the volume after use. create a checkpoint to update on only one volume
+      delete_wrapped = slicer.mrmlScene.GetFirstNodeByName('phase_cropped')
+      slicer.mrmlScene.RemoveNode(delete_wrapped)
+      delete_unwrapped = slicer.mrmlScene.GetFirstNodeByName('unwrapped_phase')
+      slicer.mrmlScene.RemoveNode(delete_unwrapped)
+
+
+      ## Setting the Slice view 
+      slice_logic = slicer.app.layoutManager().sliceWidget(''+ str(viewSelecter)).sliceLogic()
+      slice_logic.GetSliceCompositeNode().SetBackgroundVolumeID(magnitudevolume.GetID())
+
+      # view_selecter = slicer.mrmlScene.GetNodeByID('vtkMRMLSliceNode'+ str(viewSelecter))
+      view_selecter.SetFieldOfView(fov_0,fov_1,fov_2)
+      view_selecter.SetSliceOffset(offset)
+      
+      # self.lastMatrix = view_selecter.GetXYToRAS()
+      self.counter = 0
+      #lastMatrix.DeepCopy(inputransform)
+      return True
+#   
+#    else: 
+#      counter = counter + 1
+#
+#  def CompareMatrices(self, m, n):
+#    for i in range(0,4):
+#      for j in range(0,4):
+#        if m.GetElement(i,j) != n.GetElement(i,j):
+#          print ("Processing new slice ...")
+#          return False
 
 
   def realtime(self, magnitudevolume , phasevolume, imageSlice, maskThreshold, ridgeOperator,z_axis,viewSelecter, counter, lastMatrix):
@@ -532,7 +799,7 @@ class NeedleSegmentorLogic(ScriptedLoadableModuleLogic):
     for i in range(0,4):
       for j in range(0,4):
         if m.GetElement(i,j) != n.GetElement(i,j):
-          print ("Processing new slice ...")
+          print ("HII Processing new slice ...")
           return False
     return True
 
@@ -1019,11 +1286,11 @@ class NeedleSegmentorLogic(ScriptedLoadableModuleLogic):
     # fiducial.SetFiducialCoordinates(ras)
 
     ###TODO: dont delete the volume after use. create a checkpoint to update on only one volume
-    delete_wrapped = slicer.mrmlScene.GetFirstNodeByName('phase_cropped')
-    slicer.mrmlScene.RemoveNode(delete_wrapped)
-    delete_unwrapped = slicer.mrmlScene.GetFirstNodeByName('unwrapped_phase')
-    slicer.mrmlScene.RemoveNode(delete_unwrapped)
-    
+#    delete_wrapped = slicer.mrmlScene.GetFirstNodeByName('phase_cropped')
+#    slicer.mrmlScene.RemoveNode(delete_wrapped)
+#    delete_unwrapped = slicer.mrmlScene.GetFirstNodeByName('unwrapped_phase')
+#    slicer.mrmlScene.RemoveNode(delete_unwrapped)
+#    
     
     fig, axs = plt.subplots(1,2)
     fig.suptitle('Needle Tracking')
