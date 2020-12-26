@@ -104,8 +104,8 @@ class NeedleSegmentorWidget(ScriptedLoadableModuleWidget):
     self.trackingButton.clicked.connect(self.StartTimer)
     realtimebutton.addWidget(self.trackingButton)
 
-#    self.timer = qt.QTimer()
-#   self.timer.timeout.connect(self.SRCRealTimeTracking)
+    self.timer = qt.QTimer()
+    self.timer.timeout.connect(self.onRealTimeTracking)
 
     # Stop Real-Time Tracking
     self.stopsequence = qt.QPushButton('Stop Realtime Tracking')
@@ -352,7 +352,7 @@ class NeedleSegmentorLogic(ScriptedLoadableModuleLogic):
   def SRCrealtime(self, magnitudevolume , phasevolume, maskThreshold, ridgeOperator,z_axis,viewSelecter, counter):
 
     ## Counter is disabled for current use, only updates when slice view changes
-#      inputransform = slicer.mrmlScene.GetNodeByID('vtkMRMLSliceNode'+ str(viewSelecter)).GetXYToRAS()
+      inputransform = slicer.mrmlScene.GetNodeByID('vtkMRMLSliceNode'+ str(viewSelecter)).GetXYToRAS()
 
     # if (not self.CompareMatrices(lastMatrix, inputransform) or counter >= 20) :
      
@@ -491,7 +491,7 @@ class NeedleSegmentorLogic(ScriptedLoadableModuleLogic):
       mask_borderless = cv2.copyMakeBorder(mask, top, bottom, left, right, cv2.BORDER_CONSTANT, (0, 0, 0))
       
       kernel = np.ones((5, 5), np.uint8)
-      mask_borderless = cv2.erode(mask_borderless, kernel, iterations=2)
+      mask_borderless = cv2.erode(mask_borderless, kernel, iterations=5)
       mask_borderless = ndimage.binary_fill_holes(mask_borderless).astype(np.uint8)
       x, y = mask_borderless.shape
       mask_borderless = mask_borderless[0 + border_size:y - border_size, 0 + border_size:x - border_size]
@@ -560,20 +560,10 @@ class NeedleSegmentorLogic(ScriptedLoadableModuleLogic):
       view_selecter.SetFieldOfView(fov_0,fov_1,fov_2)
       view_selecter.SetSliceOffset(offset)
       
-      # self.lastMatrix = view_selecter.GetXYToRAS()
+      # print (y1,x1)
       self.counter = 0
-      #lastMatrix.DeepCopy(inputransform)
       return True
-#   
-#    else: 
-#      counter = counter + 1
-#
-#  def CompareMatrices(self, m, n):
-#    for i in range(0,4):
-#      for j in range(0,4):
-#        if m.GetElement(i,j) != n.GetElement(i,j):
-#          print ("Processing new slice ...")
-#          return False
+
 
 
   def realtime(self, magnitudevolume , phasevolume, imageSlice, maskThreshold, ridgeOperator,z_axis,viewSelecter, counter, lastMatrix):
@@ -718,7 +708,7 @@ class NeedleSegmentorLogic(ScriptedLoadableModuleLogic):
       mask_borderless = cv2.copyMakeBorder(mask, top, bottom, left, right, cv2.BORDER_CONSTANT, (0, 0, 0))
       
       kernel = np.ones((5, 5), np.uint8)
-      mask_borderless = cv2.erode(mask_borderless, kernel, iterations=2)
+      mask_borderless = cv2.erode(mask_borderless, kernel, iterations=5)
       mask_borderless = ndimage.binary_fill_holes(mask_borderless).astype(np.uint8)
       x, y = mask_borderless.shape
       mask_borderless = mask_borderless[0 + border_size:y - border_size, 0 + border_size:x - border_size]
@@ -972,7 +962,7 @@ class NeedleSegmentorLogic(ScriptedLoadableModuleLogic):
     mask_borderless = cv2.copyMakeBorder(mask, top, bottom, left, right, cv2.BORDER_CONSTANT, (0, 0, 0))
     
     kernel = np.ones((5, 5), np.uint8)
-    mask_borderless = cv2.erode(mask_borderless, kernel, iterations=2)
+    mask_borderless = cv2.erode(mask_borderless, kernel, iterations=5)
     mask_borderless = ndimage.binary_fill_holes(mask_borderless).astype(np.uint8)
     x, y = mask_borderless.shape
     mask_borderless = mask_borderless[0 + border_size:y - border_size, 0 + border_size:x - border_size]
@@ -1154,7 +1144,7 @@ class NeedleSegmentorLogic(ScriptedLoadableModuleLogic):
     pu_scalars = pu_imageData.GetPointData().GetScalars()
     pu_NumpyArray = numpy_support.vtk_to_numpy(pu_scalars)
     phaseunwrapped = pu_NumpyArray.reshape(pu_zed, pu_rows, pu_cols)
-
+    phaseunwrapped_numpy = pu_NumpyArray.reshape(pu_cols,pu_rows)
 
     I = phaseunwrapped.squeeze()
     A = np.fft.fft2(I)
@@ -1190,7 +1180,7 @@ class NeedleSegmentorLogic(ScriptedLoadableModuleLogic):
     mask_borderless = cv2.copyMakeBorder(mask, top, bottom, left, right, cv2.BORDER_CONSTANT, (0, 0, 0))
     
     kernel = np.ones((5, 5), np.uint8)
-    mask_borderless = cv2.erode(mask_borderless, kernel, iterations=2)
+    mask_borderless = cv2.erode(mask_borderless, kernel, iterations=5)
     mask_borderless = ndimage.binary_fill_holes(mask_borderless).astype(np.uint8)
     x, y = mask_borderless.shape
     mask_borderless = mask_borderless[0 + border_size:y - border_size, 0 + border_size:x - border_size]
@@ -1291,16 +1281,16 @@ class NeedleSegmentorLogic(ScriptedLoadableModuleLogic):
 #    delete_unwrapped = slicer.mrmlScene.GetFirstNodeByName('unwrapped_phase')
 #    slicer.mrmlScene.RemoveNode(delete_unwrapped)
 #    
-    
-    fig, axs = plt.subplots(1,2)
+
+    fig, axs = plt.subplots(1,3)
     fig.suptitle('Needle Tracking')
-    axs[0].imshow(meiji, cmap='gray')
-    axs[0].set_title('Magnitude + Tracked')
-    axs[0].add_artist(circle1)
-    axs[0].axis('off')
-    axs[1].set_title('Processed Phase Image')
+
+    axs[0].imshow(phaseunwrapped_numpy, cmap='gray')
     axs[1].imshow(meiji, cmap='hsv')
     axs[1].axis('off')
+    axs[2].imshow(mask_borderless,zorder=1, cmap='gray')
+    axs[2].scatter(x1,y1,zorder=2, s=1)
+    axs[2].axis('off')
     plt.savefig('mygraph.png')
 
     return True
