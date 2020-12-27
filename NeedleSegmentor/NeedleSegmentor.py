@@ -20,7 +20,7 @@ class NeedleSegmentor(ScriptedLoadableModule):
     self.parent.title = "2D Needle Segmenter "
     self.parent.categories = ["Filtering"]
     self.parent.dependencies = []
-    self.parent.contributors = ["Ahmed Mahran (BWH)"]
+    self.parent.contributors = ["Ahmed Mahran (BWH), Junichi Tokuda (BWH)"]
     self.parent.helpText = """This is a 2D needle segmenter module used to localize needle tip in the MRI image. Input requirment: 
     Magnitude image and Phase Image. Uses Prelude phase unwrapping algorithm. """
     self.parent.helpText += self.getDefaultModuleDocumentationLink()
@@ -98,7 +98,7 @@ class NeedleSegmentorWidget(ScriptedLoadableModuleWidget):
     #   
     # Start Real-Time Tracking 
     #
-    self.trackingButton = qt.QPushButton("Start Real-Time Tracking")
+    self.trackingButton = qt.QPushButton("Start Simulated Tracking")
     self.trackingButton.toolTip = "Observe slice from scene viewer"
     self.trackingButton.enabled = False
     self.trackingButton.clicked.connect(self.StartTimer)
@@ -108,7 +108,7 @@ class NeedleSegmentorWidget(ScriptedLoadableModuleWidget):
     self.timer.timeout.connect(self.onRealTimeTracking)
 
     # Stop Real-Time Tracking
-    self.stopsequence = qt.QPushButton('Stop Realtime Tracking')
+    self.stopsequence = qt.QPushButton('Stop Simulated Tracking')
     self.stopsequence.clicked.connect(self.StopTimer)
     realtimebutton.addWidget(self.stopsequence)
      
@@ -560,7 +560,7 @@ class NeedleSegmentorLogic(ScriptedLoadableModuleLogic):
       view_selecter.SetFieldOfView(fov_0,fov_1,fov_2)
       view_selecter.SetSliceOffset(offset)
       
-      # print (y1,x1)
+      print ("Needle tip location",y1,x1)
       self.counter = 0
       return True
 
