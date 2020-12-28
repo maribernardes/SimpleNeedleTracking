@@ -101,15 +101,15 @@ class NeedleSegmenterWidget(ScriptedLoadableModuleWidget):
     self.trackingButton = qt.QPushButton("Start Simulated Tracking")
     self.trackingButton.toolTip = "Observe slice from scene viewer"
     self.trackingButton.enabled = False
-    self.trackingButton.clicked.connect(self.StartTimer)
+    self.trackingButton.clicked.connect(self.SimStartTimer)
     realtimebutton.addWidget(self.trackingButton)
 
-    self.timer = qt.QTimer()
-    self.timer.timeout.connect(self.onRealTimeTracking)
+    self.Simtimer = qt.QTimer()
+    self.Simtimer.timeout.connect(self.onRealTimeTracking)
 
     # Stop Real-Time Tracking
     self.stopsequence = qt.QPushButton('Stop Simulated Tracking')
-    self.stopsequence.clicked.connect(self.StopTimer)
+    self.stopsequence.clicked.connect(self.SimStopTimer)
     realtimebutton.addWidget(self.stopsequence)
      
     parametersFormLayout.addRow("", realtimebutton)
@@ -152,7 +152,7 @@ class NeedleSegmenterWidget(ScriptedLoadableModuleWidget):
     self.timer = qt.QTimer()
     self.timer.timeout.connect(self.SRCRealTimeTracking)
 
-    # Stop Real-Time Tracking
+    # Stop  SRC Real-Time Tracking
     self.stopsequence = qt.QPushButton('Stop Live Tracking')
     self.stopsequence.clicked.connect(self.StopTimer)
     realtimebutton.addWidget(self.stopsequence)
@@ -246,8 +246,17 @@ class NeedleSegmenterWidget(ScriptedLoadableModuleWidget):
     self.phasevolume.connect("currentNodeChanged(vtkMRMLNode*)", self.onSelect)
     self.lastMatrix = vtk.vtkMatrix4x4()
     self.timer = qt.QTimer()
-#    self.timer.timeout.connect(self.onRealTimeTracking)
     self.timer.timeout.connect(self.SRCRealTimeTracking) 
+    self.Simtimer = qt.QTimer()
+    self.Simtimer.timeout.connect(self.onRealTimeTracking)
+
+  def SimStartTimer(self):
+      self.Simtimer.start(int(1000/20))
+      self.counter = 0
+
+  def SimStopTimer(self):
+      self.Simtimer.stop()
+      print("Stopped Simulated Tracking")
 
   def StartTimer(self):
     self.timer.start(int(1000/float(self.fpsBox.value)))
@@ -255,7 +264,7 @@ class NeedleSegmenterWidget(ScriptedLoadableModuleWidget):
 
   def StopTimer (self):
     self.timer.stop()
-    print ("Stopped realtime tracking ...")
+    print ("Stopped Live Tracking ...")
 
   def cleanup(self):
     pass
