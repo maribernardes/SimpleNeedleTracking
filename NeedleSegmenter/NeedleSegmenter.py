@@ -456,7 +456,7 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
       cli_input = slicer.util.getFirstNodeByName('phase_cropped')
       cli_output = slicer.util.getNode('unwrapped_phase')
       cli_params = {'inputVolume': cli_input, 'outputVolume': cli_output}
-      slicer.cli.runSync(slicer.modules.phaseunwrapping, node=None, parameters=cli_params)
+      slicer.cli.runSync(slicer.modules.phaseunwrapping, None, cli_params)
 
 
       pu_imageData = unwrapped_phase.GetImageData()
@@ -464,10 +464,6 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
       pu_scalars = pu_imageData.GetPointData().GetScalars()
       pu_NumpyArray = numpy_support.vtk_to_numpy(pu_scalars)
       phaseunwrapped = pu_NumpyArray.reshape(pu_zed, pu_rows, pu_cols)
-
-    #Delete unwrapped_phase after I get the information from it 
-     # delete_unwrapped = slicer.mrmlScene.GetFirstNodeByName('Phase Unwrapping')
-     # slicer.mrmlScene.RemoveNode(delete_unwrapped)
 
 
       I = phaseunwrapped.squeeze()
@@ -573,7 +569,7 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
       view_selecter.SetFieldOfView(fov_0,fov_1,fov_2)
       view_selecter.SetSliceOffset(offset)
       
-      #print ("Needle tip location",y1,x1)
+      print ("Needle tip location",y1,x1)
       self.counter = 0
       return True
 
@@ -677,7 +673,7 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
       cli_input = slicer.util.getFirstNodeByName('phase_cropped')
       cli_output = slicer.util.getNode('unwrapped_phase')
       cli_params = {'inputVolume': cli_input, 'outputVolume': cli_output}
-      slicer.cli.runSync(slicer.modules.phaseunwrapping, node=None, parameters=cli_params)
+      slicer.cli.runSync(slicer.modules.phaseunwrapping, None, cli_params)
 
 
       pu_imageData = unwrapped_phase.GetImageData()
@@ -931,7 +927,7 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
     cli_input = slicer.util.getFirstNodeByName('phase_cropped')
     cli_output = slicer.util.getNode('unwrapped_phase')
     cli_params = {'inputVolume': cli_input, 'outputVolume': cli_output}
-    slicer.cli.runSync(slicer.modules.phaseunwrapping, node=None, parameters=cli_params)
+    slicer.cli.runSync(slicer.modules.phaseunwrapping, None, cli_params)
 
 
     pu_imageData = unwrapped_phase.GetImageData()
@@ -1149,7 +1145,7 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
     cli_input = slicer.util.getFirstNodeByName('phase_cropped')
     cli_output = slicer.util.getNode('unwrapped_phase')
     cli_params = {'inputVolume': cli_input, 'outputVolume': cli_output}
-    slicer.cli.runSync(slicer.modules.phaseunwrapping, node=None, parameters=cli_params)
+    slicer.cli.runSync(slicer.modules.phaseunwrapping, None, cli_params)
 
 
     pu_imageData = unwrapped_phase.GetImageData()
