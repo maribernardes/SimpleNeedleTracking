@@ -444,10 +444,17 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
       #
       # Run phase unwrapping module
       #
+      parameter_name = slicer.mrmlScene.GetNodeByID('vtkMRMLCommandLineModuleNode1')
+      
+      if parameter_name is None:
+          slicer.cli.createNode(slicer.modules.phaseunwrapping)
+      else:
+          pass
+
       cli_input = slicer.util.getFirstNodeByName('phase_cropped')
       cli_output = slicer.util.getNode('unwrapped_phase')
       cli_params = {'inputVolume': cli_input, 'outputVolume': cli_output}
-      slicer.cli.runSync(slicer.modules.phaseunwrapping, node=None, parameters=cli_params)
+      slicer.cli.runSync(slicer.modules.phaseunwrapping, node=parameter_name, parameters=cli_params)
 
 
       pu_imageData = unwrapped_phase.GetImageData()
@@ -665,10 +672,16 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
       #
       # Run phase unwrapping module
       #
+      parameter_name = slicer.mrmlScene.GetNodeByID('vtkMRMLCommandLineModuleNode1')
+      
+      if parameter_name is None:
+          slicer.cli.createNode(slicer.modules.phaseunwrapping)
+      else:
+          pass
       cli_input = slicer.util.getFirstNodeByName('phase_cropped')
       cli_output = slicer.util.getNode('unwrapped_phase')
       cli_params = {'inputVolume': cli_input, 'outputVolume': cli_output}
-      slicer.cli.runSync(slicer.modules.phaseunwrapping, node=None, parameters=cli_params)
+      slicer.cli.runSync(slicer.modules.phaseunwrapping, node=parameter_name, parameters=cli_params)
 
 
       pu_imageData = unwrapped_phase.GetImageData()
@@ -919,10 +932,16 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
     #
     # Run phase unwrapping module
     #
+    parameter_name = slicer.mrmlScene.GetNodeByID('vtkMRMLCommandLineModuleNode1')
+    
+    if parameter_name is None:
+        slicer.cli.createNode(slicer.modules.phaseunwrapping)
+    else:
+        pass
     cli_input = slicer.util.getFirstNodeByName('phase_cropped')
     cli_output = slicer.util.getNode('unwrapped_phase')
     cli_params = {'inputVolume': cli_input, 'outputVolume': cli_output}
-    slicer.cli.runSync(slicer.modules.phaseunwrapping, node=None, parameters=cli_params)
+    slicer.cli.runSync(slicer.modules.phaseunwrapping, node=parameter_name, parameters=cli_params)
 
 
     pu_imageData = unwrapped_phase.GetImageData()
@@ -1137,10 +1156,16 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
     #
     # Run phase unwrapping module
     #
+    parameter_name = slicer.mrmlScene.GetNodeByID('vtkMRMLCommandLineModuleNode1')
+    
+    if parameter_name is None:
+        slicer.cli.createNode(slicer.modules.phaseunwrapping)
+    else:
+        pass
     cli_input = slicer.util.getFirstNodeByName('phase_cropped')
     cli_output = slicer.util.getNode('unwrapped_phase')
     cli_params = {'inputVolume': cli_input, 'outputVolume': cli_output}
-    slicer.cli.runSync(slicer.modules.phaseunwrapping, node=None, parameters=cli_params)
+    slicer.cli.runSync(slicer.modules.phaseunwrapping, node=parameter_name, parameters=cli_params)
 
 
     pu_imageData = unwrapped_phase.GetImageData()
