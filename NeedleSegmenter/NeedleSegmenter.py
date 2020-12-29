@@ -132,15 +132,15 @@ class NeedleSegmenterWidget(ScriptedLoadableModuleWidget):
     self.trackingButton = qt.QPushButton("Start Simulated Tracking")
     self.trackingButton.toolTip = "Observe slice from scene viewer"
     self.trackingButton.enabled = False
-    self.trackingButton.clicked.connect(self.StartTimer)
+    self.trackingButton.clicked.connect(self.SimStartTimer)
     realtimebutton.addWidget(self.trackingButton)
 
-    self.timer = qt.QTimer()
-    self.timer.timeout.connect(self.onRealTimeTracking)
+    self.SimTimer = qt.QTimer()
+    self.SimTimer.timeout.connect(self.onRealTimeTracking)
 
     # Stop Real-Time Tracking
     self.stopsequence = qt.QPushButton('Stop Simulated Tracking')
-    self.stopsequence.clicked.connect(self.StopTimer)
+    self.stopsequence.clicked.connect(self.SimStopTimer)
     realtimebutton.addWidget(self.stopsequence)
      
     parametersFormLayout.addRow("", realtimebutton)
@@ -275,8 +275,17 @@ class NeedleSegmenterWidget(ScriptedLoadableModuleWidget):
     self.phasevolume.connect("currentNodeChanged(vtkMRMLNode*)", self.onSelect)
     self.lastMatrix = vtk.vtkMatrix4x4()
     self.timer = qt.QTimer()
-#    self.timer.timeout.connect(self.onRealTimeTracking)
     self.timer.timeout.connect(self.SRCRealTimeTracking) 
+    self.SimTimer = qt.QTimer()
+    self.SimTimer.timeout.connect(self.onRealTimeTracking)
+
+  def SimStartTimer(self):
+      self.SimTimer.start(int(1000/int(50)))
+      self.counter = 0
+
+  def SimStopTimer(self):
+      self.SimTimer.stop()
+      print ("Stopped Simulated Tracking...")
 
   def StartTimer(self):
     self.timer.start(int(1000/float(self.fpsBox.value)))
@@ -284,7 +293,7 @@ class NeedleSegmenterWidget(ScriptedLoadableModuleWidget):
 
   def StopTimer (self):
     self.timer.stop()
-    print ("Stopped realtime tracking ...")
+    print ("Stopped Live Tracking ...")
 
   def cleanup(self):
     pass
@@ -367,7 +376,6 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
       return False
     return True
 
-
   def detectNeedle(self, magnitudevolume, phasevolume, truePhasePoint, maskThreshold, ridgeOperator, slice_index):
 
     #magnitude volume
@@ -440,8 +448,15 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
     #
     # Run phase unwrapping module
     #
+    parameter_name = slicer.mrmlScene.GetNodeByID('vtkMRMLCommandLineModuleNode1')
+    
+    if parameter_name is None:
+        slicer.cli.createNode(slicer.modules.phaseunwrapping)
+    else:
+        pass
     cli_input = slicer.util.getFirstNodeByName('phase_cropped')
     cli_output = slicer.util.getNode('unwrapped_phase')
+
     cli_params = {'inputVolume': cli_input, 'outputVolume': cli_output, 'truePhase': truePhasePoint}
     self.cliParamNode = slicer.cli.runSync(slicer.modules.phaseunwrapping, node=self.cliParamNode, parameters=cli_params)
 
@@ -585,11 +600,12 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
     slice_logic = slicer.app.layoutManager().sliceWidget(''+ str(viewSelecter)).sliceLogic()
     slice_logic.GetSliceCompositeNode().SetBackgroundVolumeID(magnitudevolume.GetID())
 
+
     # view_selecter = slicer.mrmlScene.GetNodeByID('vtkMRMLSliceNode'+ str(viewSelecter))
     sliceNode.SetFieldOfView(fov[0],fov[1],fov[2])
     sliceNode.SetSliceOffset(offset)
-    
 
+    
   def realtime(self, magnitudevolume , phasevolume, truePhasePoint, maskThreshold, ridgeOperator,viewSelecter, counter, lastMatrix):
 
     ## Counter is disabled for current use, only updates when slice view changes
