@@ -527,21 +527,16 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
     coords = [x1,y1,slice_index]
     circle1 = plt.Circle(point,2,color='red')
 
-    # Create MRML transform node
-    
-    transforms = slicer.mrmlScene.GetNodesByClassByName('vtkMRMLLinearTransformNode','Transform')
-    nbTransforms = transforms.GetNumberOfItems()
-    if (nbTransforms >= 1): 
-      for i in range(nbTransforms):
-        transformNode = slicer.util.getNode('Transform')
-        transformNode.SetAndObserveMatrixTransformToParent(magn_matrix)
-
-    else:
-      # transformNode = slicer.mrmlScene.CreateNodeByClass ('vtkMRMLAnnotationFiducialNode')
+    # Find or create MRML transform node
+    transformNode = None
+    try:
+      transformNode = slicer.util.getNode('TipTransform')
+    except slicer.util.MRMLNodeNotFoundException as exc:
       transformNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLLinearTransformNode')
-      transformNode.SetName("Transform")
-      transformNode.SetAndObserveMatrixTransformToParent(magn_matrix)
-
+      transformNode.SetName("TipTransform")
+      
+    transformNode.SetAndObserveMatrixTransformToParent(magn_matrix)
+    
     # Fiducial Creation
     fidNode1 = None
     try: 
