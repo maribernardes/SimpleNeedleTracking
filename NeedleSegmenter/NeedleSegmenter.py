@@ -10,6 +10,7 @@ from scipy import ndimage
 from skimage.filters import meijering, sato
 import cv2
 import tempfile
+import matplotlib.pyplot as plt
 
 
 class NeedleSegmenter(ScriptedLoadableModule):
@@ -294,7 +295,7 @@ class NeedleSegmenterWidget(ScriptedLoadableModuleWidget):
     self.autosliceselecterButton.enabled = self.magnitudevolume.currentNode() and self.phasevolume.currentNode()
     self.SRCtrackingButton.enabled = self.magnitudevolume.currentNode() and self.phasevolume.currentNode()
 
-  def getViewSelecter():
+  def getViewSelecter(self):
     viewSelecter = None
     if (self.sceneViewButton_red.checked == True):
       viewSelecter = ("Red")
@@ -302,7 +303,7 @@ class NeedleSegmenterWidget(ScriptedLoadableModuleWidget):
       viewSelecter = ("Yellow")
     elif (self.sceneViewButton_green.checked ==True):
       viewSelecter = ("Green")
-    return viewSeelecter
+    return viewSelecter
     
   def autosliceselecter (self):
     logic = NeedleSegmenterLogic()
@@ -441,7 +442,7 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
     #
     cli_input = slicer.util.getFirstNodeByName('phase_cropped')
     cli_output = slicer.util.getNode('unwrapped_phase')
-    cli_params = {'inputVolume': cli_input, 'outputVolume': cli_output}
+    cli_params = {'inputVolume': cli_input, 'outputVolume': cli_output, 'truePhase': truePhasePoint}
     self.cliParamNode = slicer.cli.runSync(slicer.modules.phaseunwrapping, node=self.cliParamNode, parameters=cli_params)
 
     pu_imageData = unwrapped_phase.GetImageData()
@@ -527,15 +528,14 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
       transformNode.SetAndObserveMatrixTransformToParent(magn_matrix)
 
     # Fiducial Creation
-    nodes = slicer.mrmlScene.GetNodesByClass('vtkMRMLMarkupsFiducialNode')
-    nbNodes = nodes.GetNumberOfItems()
-    if (nbNodes >= 1): 
-      for i in range(nbNodes):
-        fidNode1 = slicer.util.getNode('needle_tip')
-        ## to view mutiple fiducial comment the line below
-        fidNode1.RemoveAllMarkups()
-    else:
+    fidNode1 = None
+    try: 
+      fidNode1 = slicer.util.getNode('needle_tip')
+    except slicer.util.MRMLNodeNotFoundException as exc:
       fidNode1 = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode", "needle_tip")
+
+    fidNode1.RemoveAllMarkups()
+      
     #  fidNode1.CreateDefaultDisplayNodes()
     #  fidNode1.SetMaximumNumberOfControlPoints(1) 
 
@@ -557,10 +557,11 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
   def findSliceIndex(self, viewSelecter):
     
     ## Find Slice location
-    view_selecter = slicer.mrmlScene.GetNodeByID('vtkMRMLSliceNode'+ str(viewSelecter))
-    fov_0,fov_1,fov_2 = view_selecter.GetFieldOfView()
+    sliceNode = slicer.mrmlScene.GetNodeByID('vtkMRMLSliceNode'+ str(viewSelecter))
+    fov_0,fov_1,fov_2 = sliceNode.GetFieldOfView()
     layoutManager = slicer.app.layoutManager()
     slice_index = None
+    offset = 0.0
     for sliceViewName in [''+ str(viewSelecter)]:
       sliceWidget = layoutManager.sliceWidget(sliceViewName)
       sliceWidgetLogic = sliceWidget.sliceLogic()
@@ -568,23 +569,25 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
       slice_index = sliceWidgetLogic.GetSliceIndexFromOffset(offset)
       slice_index = (slice_index - 1)
       # offsets.append(offset)
-
-    return slice_index
+      
+    fov = [fov_0,fov_1,fov_2]
+      
+    return (slice_index, sliceNode, fov, offset)
   
   
   def SRCrealtime(self, magnitudevolume , phasevolume, truePhasePoint, maskThreshold, ridgeOperator,viewSelecter, counter):
     
-    slice_index = self.findSliceIndex(viewSelecter)
+    (slice_index, sliceNode, fov, offset) = self.findSliceIndex(viewSelecter)
     
-    self.detectNeedle(self, magnitudevolume , phasevolume, maskThreshold, ridgeOperator, slice_index)
+    self.detectNeedle(magnitudevolume , phasevolume, maskThreshold, ridgeOperator, slice_index)
 
     ## Setting the Slice view 
     slice_logic = slicer.app.layoutManager().sliceWidget(''+ str(viewSelecter)).sliceLogic()
     slice_logic.GetSliceCompositeNode().SetBackgroundVolumeID(magnitudevolume.GetID())
 
     # view_selecter = slicer.mrmlScene.GetNodeByID('vtkMRMLSliceNode'+ str(viewSelecter))
-    view_selecter.SetFieldOfView(fov_0,fov_1,fov_2)
-    view_selecter.SetSliceOffset(offset)
+    sliceNode.SetFieldOfView(fov[0],fov[1],fov[2])
+    sliceNode.SetSliceOffset(offset)
     
 
   def realtime(self, magnitudevolume , phasevolume, truePhasePoint, maskThreshold, ridgeOperator,viewSelecter, counter, lastMatrix):
@@ -592,19 +595,19 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
     ## Counter is disabled for current use, only updates when slice view changes
     inputransform = slicer.mrmlScene.GetNodeByID('vtkMRMLSliceNode'+ str(viewSelecter)).GetXYToRAS()
 
-    slice_index = self.findSliceIndex(viewSelecter)
+    (slice_index, sliceNode, fov, offset) = self.findSliceIndex(viewSelecter)
       
     if (not self.CompareMatrices(lastMatrix, inputransform) or counter >= 20) :
 
-      self.detectNeedle(self, magnitudevolume , phasevolume, truePhasePoint, maskThreshold, ridgeOperator, slice_index)
+      self.detectNeedle(magnitudevolume , phasevolume, truePhasePoint, maskThreshold, ridgeOperator, slice_index)
      
       ## Setting the Slice view 
       slice_logic = slicer.app.layoutManager().sliceWidget(''+ str(viewSelecter)).sliceLogic()
       slice_logic.GetSliceCompositeNode().SetBackgroundVolumeID(magnitudevolume.GetID())
 
       # view_selecter = slicer.mrmlScene.GetNodeByID('vtkMRMLSliceNode'+ str(viewSelecter))
-      view_selecter.SetFieldOfView(fov_0,fov_1,fov_2)
-      view_selecter.SetSliceOffset(offset)
+      sliceNode.SetFieldOfView(fov[0],fov[1],fov[2])
+      sliceNode.SetSliceOffset(offset)
       
       # self.lastMatrix = view_selecter.GetXYToRAS()
       self.counter = 0
@@ -626,17 +629,17 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
 
   def needlefinder(self, magnitudevolume , phasevolume, truePhasePoint, maskThreshold, ridgeOperator, viewSelecter):
 
-    slice_index = self.findSliceIndex(viewSelecter)
+    (slice_index, sliceNode, fov, offset) = self.findSliceIndex(viewSelecter)
 
-    self.detectNeedle(self, magnitudevolume , phasevolume, truePhasePoint, maskThreshold, ridgeOperator, slice_index)
+    self.detectNeedle(magnitudevolume , phasevolume, truePhasePoint, maskThreshold, ridgeOperator, slice_index)
 
     ## Setting the Slice view 
     slice_logic = slicer.app.layoutManager().sliceWidget(''+ str(viewSelecter)).sliceLogic()
     slice_logic.GetSliceCompositeNode().SetBackgroundVolumeID(magnitudevolume.GetID())
 
     # view_selecter = slicer.mrmlScene.GetNodeByID('vtkMRMLSliceNode'+ str(viewSelecter))
-    view_selecter.SetFieldOfView(fov_0,fov_1,fov_2)
-    view_selecter.SetSliceOffset(offset)
+    sliceNode.SetFieldOfView(fov[0],fov[1],fov[2])
+    sliceNode.SetSliceOffset(offset)
     # if (viewSelecter == "Red"): 
     #   view_selecter.SetSliceOffset(z_ras)
     # elif (viewSelecter == "Yellow"):
@@ -649,7 +652,7 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
 
     slice_slice = int(imageSlice)
 
-    self.detectNeedle(self, magnitudevolume , phasevolume, truePhasePoint, maskThreshold, ridgeOperator, slice_index)
+    self.detectNeedle(magnitudevolume , phasevolume, truePhasePoint, maskThreshold, ridgeOperator, slice_index)
 
     fig, axs = plt.subplots(1,3)
     fig.suptitle('Needle Tracking')
