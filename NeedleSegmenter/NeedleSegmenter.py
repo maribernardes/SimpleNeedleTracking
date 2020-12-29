@@ -106,9 +106,7 @@ class NeedleSegmenterWidget(ScriptedLoadableModuleWidget):
     # Select which scene view to track
     #
     self.sceneViewButton_red = qt.QRadioButton('Red')
-
     self.sceneViewButton_yellow = qt.QRadioButton('Yellow')
-
     self.sceneViewButton_green = qt.QRadioButton('Green')
     self.sceneViewButton_green.checked = 1
 
@@ -296,73 +294,52 @@ class NeedleSegmenterWidget(ScriptedLoadableModuleWidget):
     self.autosliceselecterButton.enabled = self.magnitudevolume.currentNode() and self.phasevolume.currentNode()
     self.SRCtrackingButton.enabled = self.magnitudevolume.currentNode() and self.phasevolume.currentNode()
 
+  def getViewSelecter():
+    viewSelecter = None
+    if (self.sceneViewButton_red.checked == True):
+      viewSelecter = ("Red")
+    elif (self.sceneViewButton_yellow.checked ==True):
+      viewSelecter = ("Yellow")
+    elif (self.sceneViewButton_green.checked ==True):
+      viewSelecter = ("Green")
+    return viewSeelecter
+    
   def autosliceselecter (self):
     logic = NeedleSegmenterLogic()
     enableProcessedFlag = self.enableprocessedimagecheckbox.checked
     if (enableProcessedFlag==True):
       enablenumber = 1
-    enableScreenshotsFlag = self.enableScreenshotsFlagCheckBox.checked
-    if (self.sceneViewButton_red.checked == True):
-      viewSelecter = ("Red")
-      self.z_axis = (0)
-    elif (self.sceneViewButton_yellow.checked ==True):
-      viewSelecter = ("Yellow")
-      self.z_axis = 1
-    elif (self.sceneViewButton_green.checked ==True):
-      viewSelecter = ("Green")
-      self.z_axis = (2)
-
+      
+    viewSelecter = self.getViewSelecter()
     maskThreshold = self.maskThresholdWidget.value
     ridgeOperator = self.ridgeOperatorWidget.value
-    logic.needlefinder(self.magnitudevolume.currentNode(), self.phasevolume.currentNode(), maskThreshold, ridgeOperator, self.z_axis, viewSelecter)
+    logic.needlefinder(self.magnitudevolume.currentNode(), self.phasevolume.currentNode(), self.truePhasePointSelector.currentNode(), maskThreshold, ridgeOperator, viewSelecter)
 
   def onRealTimeTracking(self):
     self.counter = 0
     logic = NeedleSegmenterLogic()
-    enableScreenshotsFlag = self.enableScreenshotsFlagCheckBox.checked
-    if (self.sceneViewButton_red.checked == True):
-      viewSelecter = ("Red")
-      self.z_axis = (0)
-    elif (self.sceneViewButton_yellow.checked ==True):
-      viewSelecter = ("Yellow")
-      self.z_axis = 1
-    elif (self.sceneViewButton_green.checked ==True):
-      viewSelecter = ("Green")
-      self.z_axis = (2)
     
+    viewSelecter = self.getViewSelecter()
     maskThreshold = self.maskThresholdWidget.value
     ridgeOperator = self.ridgeOperatorWidget.value
-    logic.realtime(self.magnitudevolume.currentNode(), self.phasevolume.currentNode(), maskThreshold, ridgeOperator, self.z_axis,
-                   viewSelecter, self.counter, self.lastMatrix)
+    logic.realtime(self.magnitudevolume.currentNode(), self.phasevolume.currentNode(), self.truePhasePointSelector.currentNode(), maskThreshold, ridgeOperator, viewSelecter, self.counter, self.lastMatrix)
 
   def SRCRealTimeTracking(self):
   #set observer node so that i can the image as it updates
     self.counter = 0
     logic = NeedleSegmenterLogic()
-    if (self.sceneViewButton_red.checked == True):
-      viewSelecter = ("Red")
-      self.z_axis = (0)
-    elif (self.sceneViewButton_yellow.checked ==True):
-      viewSelecter = ("Yellow")
-      self.z_axis = 1
-    elif (self.sceneViewButton_green.checked ==True):
-      viewSelecter = ("Green")
-      self.z_axis = (2)
-      
+    viewSelecter = self.getViewSelecter()      
     maskThreshold = self.maskThresholdWidget.value
     ridgeOperator = self.ridgeOperatorWidget.value
-    logic.SRCrealtime(self.magnitudevolume.currentNode(), self.phasevolume.currentNode(), maskThreshold, ridgeOperator,self.z_axis,
-                      viewSelecter, self.counter)
+    logic.SRCrealtime(self.magnitudevolume.currentNode(), self.phasevolume.currentNode(), self.truePhasePointSelector.currentNode(), maskThreshold, ridgeOperator, viewSelecter, self.counter)
 
   def onApplyButton(self):
     logic = NeedleSegmenterLogic()
-    enableScreenshotsFlag = self.enableScreenshotsFlagCheckBox.checked
     imageSlice = self.imageSliceSliderWidget.value
     maskThreshold = self.maskThresholdWidget.value
     ridgeOperator = self.ridgeOperatorWidget.value
-    logic.run(self.magnitudevolume.currentNode(), self.phasevolume.currentNode(), imageSlice, maskThreshold, ridgeOperator, enableScreenshotsFlag)
+    logic.run(self.magnitudevolume.currentNode(), self.phasevolume.currentNode(), self.truePhasePointSelector.currentNode(), imageSlice, maskThreshold, ridgeOperator)
 
-    
   def onReload(self,moduleName="NeedleSegmenter"):
     """Generic reload method for any scripted module.
     ModuleWizard will subsitute correct default moduleName.
@@ -390,33 +367,7 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
     return True
 
 
-  def SRCrealtime(self, magnitudevolume , phasevolume, maskThreshold, ridgeOperator,z_axis,viewSelecter, counter):
-    
-    ## Find Slice location
-    view_selecter = slicer.mrmlScene.GetNodeByID('vtkMRMLSliceNode'+ str(viewSelecter))
-    fov_0,fov_1,fov_2 = view_selecter.GetFieldOfView()
-    layoutManager = slicer.app.layoutManager()
-    slice_index = None
-    for sliceViewName in [''+ str(viewSelecter)]:
-      sliceWidget = layoutManager.sliceWidget(sliceViewName)
-      sliceWidgetLogic = sliceWidget.sliceLogic()
-      offset = sliceWidgetLogic.GetSliceOffset()
-      slice_index = sliceWidgetLogic.GetSliceIndexFromOffset(offset)
-      slice_index = (slice_index - 1)
-      # offsets.append(offset)
-
-    self.detectNeedle(self, magnitudevolume , phasevolume, maskThreshold, ridgeOperator, slice_index)
-
-    ## Setting the Slice view 
-    slice_logic = slicer.app.layoutManager().sliceWidget(''+ str(viewSelecter)).sliceLogic()
-    slice_logic.GetSliceCompositeNode().SetBackgroundVolumeID(magnitudevolume.GetID())
-
-    # view_selecter = slicer.mrmlScene.GetNodeByID('vtkMRMLSliceNode'+ str(viewSelecter))
-    view_selecter.SetFieldOfView(fov_0,fov_1,fov_2)
-    view_selecter.SetSliceOffset(offset)
-    
-    
-  def detectNeedle(self, magnitudevolume , phasevolume, maskThreshold, ridgeOperator, slice_index):
+  def detectNeedle(self, magnitudevolume, phasevolume, truePhasePoint, maskThreshold, ridgeOperator, slice_index):
 
     #magnitude volume
     magn_imageData = magnitudevolume.GetImageData()
@@ -427,7 +378,6 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
     magn_matrix = vtk.vtkMatrix4x4()
     magnitudevolume.GetIJKToRASMatrix(magn_matrix)
     # magnitudevolume.CreateDefaultDisplayNodes()
-
 
     # phase volume
     phase_imageData = phasevolume.GetImageData()
@@ -473,8 +423,6 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
     phase_cropped = cv2.bitwise_and(numpy_phase, numpy_phase, mask=mask)
     phase_cropped =  np.expand_dims(phase_cropped, axis=0)
 
-
-
     node = slicer.vtkMRMLScalarVolumeNode()
     node.SetName('phase_cropped')
     slicer.mrmlScene.AddNode(node)
@@ -484,11 +432,9 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
     node.SetSpacing(magn_imageSpacing)
     node.SetIJKToRASDirectionMatrix(magn_matrix)
 
-
     unwrapped_phase = slicer.vtkMRMLScalarVolumeNode()
     unwrapped_phase.SetName('unwrapped_phase')
     slicer.mrmlScene.AddNode(unwrapped_phase)
-
 
     #
     # Run phase unwrapping module
@@ -608,15 +554,13 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
     return True
 
 
-  def realtime(self, magnitudevolume , phasevolume, maskThreshold, ridgeOperator,z_axis,viewSelecter, counter, lastMatrix):
-
-    ## Counter is disabled for current use, only updates when slice view changes
-    inputransform = slicer.mrmlScene.GetNodeByID('vtkMRMLSliceNode'+ str(viewSelecter)).GetXYToRAS()
-
+  def findSliceIndex(self, viewSelecter):
+    
     ## Find Slice location
     view_selecter = slicer.mrmlScene.GetNodeByID('vtkMRMLSliceNode'+ str(viewSelecter))
     fov_0,fov_1,fov_2 = view_selecter.GetFieldOfView()
     layoutManager = slicer.app.layoutManager()
+    slice_index = None
     for sliceViewName in [''+ str(viewSelecter)]:
       sliceWidget = layoutManager.sliceWidget(sliceViewName)
       sliceWidgetLogic = sliceWidget.sliceLogic()
@@ -624,10 +568,35 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
       slice_index = sliceWidgetLogic.GetSliceIndexFromOffset(offset)
       slice_index = (slice_index - 1)
       # offsets.append(offset)
+
+    return slice_index
+  
+  
+  def SRCrealtime(self, magnitudevolume , phasevolume, truePhasePoint, maskThreshold, ridgeOperator,viewSelecter, counter):
+    
+    slice_index = self.findSliceIndex(viewSelecter)
+    
+    self.detectNeedle(self, magnitudevolume , phasevolume, maskThreshold, ridgeOperator, slice_index)
+
+    ## Setting the Slice view 
+    slice_logic = slicer.app.layoutManager().sliceWidget(''+ str(viewSelecter)).sliceLogic()
+    slice_logic.GetSliceCompositeNode().SetBackgroundVolumeID(magnitudevolume.GetID())
+
+    # view_selecter = slicer.mrmlScene.GetNodeByID('vtkMRMLSliceNode'+ str(viewSelecter))
+    view_selecter.SetFieldOfView(fov_0,fov_1,fov_2)
+    view_selecter.SetSliceOffset(offset)
+    
+
+  def realtime(self, magnitudevolume , phasevolume, truePhasePoint, maskThreshold, ridgeOperator,viewSelecter, counter, lastMatrix):
+
+    ## Counter is disabled for current use, only updates when slice view changes
+    inputransform = slicer.mrmlScene.GetNodeByID('vtkMRMLSliceNode'+ str(viewSelecter)).GetXYToRAS()
+
+    slice_index = self.findSliceIndex(viewSelecter)
       
     if (not self.CompareMatrices(lastMatrix, inputransform) or counter >= 20) :
 
-      self.detectNeedle(self, magnitudevolume , phasevolume, maskThreshold, ridgeOperator, slice_index)
+      self.detectNeedle(self, magnitudevolume , phasevolume, truePhasePoint, maskThreshold, ridgeOperator, slice_index)
      
       ## Setting the Slice view 
       slice_logic = slicer.app.layoutManager().sliceWidget(''+ str(viewSelecter)).sliceLogic()
@@ -655,24 +624,11 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
     return True
 
 
-  def needlefinder(self, magnitudevolume , phasevolume, maskThreshold, ridgeOperator,z_axis, viewSelecter):
+  def needlefinder(self, magnitudevolume , phasevolume, truePhasePoint, maskThreshold, ridgeOperator, viewSelecter):
 
-    ## Find Slice location
-    #TODO: offset only gives the RAS of the center of the image, this will not for reformated images with
-    ## oblique slice views. 
-    view_selecter = slicer.mrmlScene.GetNodeByID('vtkMRMLSliceNode'+ str(viewSelecter))
-    fov_0,fov_1,fov_2 = view_selecter.GetFieldOfView()
-    layoutManager = slicer.app.layoutManager()
-    offsets = []
-    for sliceViewName in [''+ str(viewSelecter)]:
-      sliceWidget = layoutManager.sliceWidget(sliceViewName)
-      sliceWidgetLogic = sliceWidget.sliceLogic()
-      offset = sliceWidgetLogic.GetSliceOffset()
-      slice_index = sliceWidgetLogic.GetSliceIndexFromOffset(offset)
-      slice_index = (slice_index - 1)
-      offsets.append(offset)
+    slice_index = self.findSliceIndex(viewSelecter)
 
-    self.detectNeedle(self, magnitudevolume , phasevolume, maskThreshold, ridgeOperator, slice_index)
+    self.detectNeedle(self, magnitudevolume , phasevolume, truePhasePoint, maskThreshold, ridgeOperator, slice_index)
 
     ## Setting the Slice view 
     slice_logic = slicer.app.layoutManager().sliceWidget(''+ str(viewSelecter)).sliceLogic()
@@ -689,12 +645,11 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
     #   view_selecter.SetSliceOffset(y_ras)
 
 
-  def run(self, magnitudevolume , phasevolume, imageSlice, maskThreshold, ridgeOperator,z_axis):
-
+  def run(self, magnitudevolume , phasevolume, truePhasePoint, imageSlice, maskThreshold, ridgeOperator):
 
     slice_slice = int(imageSlice)
 
-    self.detectNeedle(self, magnitudevolume , phasevolume, maskThreshold, ridgeOperator, slice_index)
+    self.detectNeedle(self, magnitudevolume , phasevolume, truePhasePoint, maskThreshold, ridgeOperator, slice_index)
 
     fig, axs = plt.subplots(1,3)
     fig.suptitle('Needle Tracking')
