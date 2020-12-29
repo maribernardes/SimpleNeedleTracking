@@ -101,15 +101,15 @@ class NeedleSegmenterWidget(ScriptedLoadableModuleWidget):
     self.trackingButton = qt.QPushButton("Start Simulated Tracking")
     self.trackingButton.toolTip = "Observe slice from scene viewer"
     self.trackingButton.enabled = False
-    self.trackingButton.clicked.connect(self.SimStartTimer)
+    self.trackingButton.clicked.connect(self.StartTimer)
     realtimebutton.addWidget(self.trackingButton)
 
-    self.SimTimer = qt.QTimer()
-    self.SimTimer.timeout.connect(self.onRealTimeTracking)
+    self.timer = qt.QTimer()
+    self.timer.timeout.connect(self.onRealTimeTracking)
 
     # Stop Real-Time Tracking
     self.stopsequence = qt.QPushButton('Stop Simulated Tracking')
-    self.stopsequence.clicked.connect(self.SimStopTimer)
+    self.stopsequence.clicked.connect(self.StopTimer)
     realtimebutton.addWidget(self.stopsequence)
      
     parametersFormLayout.addRow("", realtimebutton)
@@ -246,17 +246,8 @@ class NeedleSegmenterWidget(ScriptedLoadableModuleWidget):
     self.phasevolume.connect("currentNodeChanged(vtkMRMLNode*)", self.onSelect)
     self.lastMatrix = vtk.vtkMatrix4x4()
     self.timer = qt.QTimer()
+#    self.timer.timeout.connect(self.onRealTimeTracking)
     self.timer.timeout.connect(self.SRCRealTimeTracking) 
-    self.SimTimer = qt.QTimer()
-    self.SimTimer.timeout.connect(self.onRealTimeTracking)
-
-  def SimStartTimer(self):
-      self.SimTimer.start(int(1000/int(50)))
-      self.counter = 0
-
-  def SimStopTimer(self):
-      self.SimTimer.stop()
-      print ("Stopped Simulated Tracking...")
 
   def StartTimer(self):
     self.timer.start(int(1000/float(self.fpsBox.value)))
@@ -264,7 +255,7 @@ class NeedleSegmenterWidget(ScriptedLoadableModuleWidget):
 
   def StopTimer (self):
     self.timer.stop()
-    print ("Stopped Live Tracking ...")
+    print ("Stopped realtime tracking ...")
 
   def cleanup(self):
     pass
@@ -815,7 +806,7 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
     for i in range(0,4):
       for j in range(0,4):
         if m.GetElement(i,j) != n.GetElement(i,j):
-          print ("Processing new slice ...")
+          print ("HII Processing new slice ...")
           return False
     return True
 
