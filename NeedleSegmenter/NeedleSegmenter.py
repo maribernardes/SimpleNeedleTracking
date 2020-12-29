@@ -594,7 +594,7 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
     
     (slice_index, sliceNode, fov, offset) = self.findSliceIndex(viewSelecter)
     
-    self.detectNeedle(magnitudevolume , phasevolume, maskThreshold, ridgeOperator, slice_index)
+    self.detectNeedle(magnitudevolume , phasevolume, truePhasePoint, maskThreshold, ridgeOperator, slice_index)
 
     ## Setting the Slice view 
     slice_logic = slicer.app.layoutManager().sliceWidget(''+ str(viewSelecter)).sliceLogic()
