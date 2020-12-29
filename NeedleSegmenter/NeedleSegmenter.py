@@ -466,6 +466,9 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
     pu_NumpyArray = numpy_support.vtk_to_numpy(pu_scalars)
     phaseunwrapped = pu_NumpyArray.reshape(pu_zed, pu_rows, pu_cols)
 
+    # for debug
+    self.phaseunwrapped_numpy = pu_NumpyArray.reshape(pu_cols,pu_rows)
+
     #Delete unwrapped_phase after I get the information from it 
     # delete_unwrapped = slicer.mrmlScene.GetFirstNodeByName('Phase Unwrapping')
     # slicer.mrmlScene.RemoveNode(delete_unwrapped)
@@ -511,6 +514,9 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
 
     B2 = cv2.bitwise_and(B2, B2, mask=mask_borderless)
 
+    # for debug
+    self.mask_borderless = mask_borderless
+
     # ridgeOperator = int(ridgeOperator)
     meiji = sato(B2, sigmas=(ridgeOperator, ridgeOperator), black_ridges=True)
 
@@ -523,9 +529,14 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
     
     (y1,x1) = np.unravel_index(sort[0], meiji.shape) # best match
 
+    self.meiji = meiji
+
     point = (x1,y1)
     coords = [x1,y1,slice_index]
     circle1 = plt.Circle(point,2,color='red')
+
+    self.x1 = x1
+    self.y1 = y1
 
     # Find or create MRML transform node
     transformNode = None
@@ -661,18 +672,18 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
 
   def run(self, magnitudevolume , phasevolume, truePhasePoint, imageSlice, maskThreshold, ridgeOperator):
 
-    slice_slice = int(imageSlice)
+    slice_index = int(imageSlice)
 
     self.detectNeedle(magnitudevolume , phasevolume, truePhasePoint, maskThreshold, ridgeOperator, slice_index)
 
     fig, axs = plt.subplots(1,3)
     fig.suptitle('Needle Tracking')
 
-    axs[0].imshow(phaseunwrapped_numpy, cmap='gray')
-    axs[1].imshow(meiji, cmap='hsv')
+    axs[0].imshow(self.phaseunwrapped_numpy, cmap='gray')
+    axs[1].imshow(self.meiji, cmap='hsv')
     axs[1].axis('off')
-    axs[2].imshow(mask_borderless,zorder=1, cmap='gray')
-    axs[2].scatter(x1,y1,zorder=2, s=1)
+    axs[2].imshow(self.mask_borderless,zorder=1, cmap='gray')
+    axs[2].scatter(self.x1,self.y1,zorder=2, s=1)
     axs[2].axis('off')
     plt.savefig('mygraph.png')
 
