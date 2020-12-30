@@ -374,16 +374,16 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
 
 
       ## Find Slice location
-      view_selecter = slicer.mrmlScene.GetNodeByID('vtkMRMLSliceNode'+ str(viewSelecter))
-      fov_0,fov_1,fov_2 = view_selecter.GetFieldOfView()
-      layoutManager = slicer.app.layoutManager()
-      for sliceViewName in [''+ str(viewSelecter)]:
-        sliceWidget = layoutManager.sliceWidget(sliceViewName)
-        sliceWidgetLogic = sliceWidget.sliceLogic()
-        offset = sliceWidgetLogic.GetSliceOffset()
-        slice_index = sliceWidgetLogic.GetSliceIndexFromOffset(offset)
-        slice_index = (slice_index - 1)
-        # offsets.append(offset)
+#      view_selecter = slicer.mrmlScene.GetNodeByID('vtkMRMLSliceNode'+ str(viewSelecter))
+#      fov_0,fov_1,fov_2 = view_selecter.GetFieldOfView()
+#      layoutManager = slicer.app.layoutManager()
+#      for sliceViewName in [''+ str(viewSelecter)]:
+#        sliceWidget = layoutManager.sliceWidget(sliceViewName)
+#        sliceWidgetLogic = sliceWidget.sliceLogic()
+#        offset = sliceWidgetLogic.GetSliceOffset()
+#        slice_index = sliceWidgetLogic.GetSliceIndexFromOffset(offset)
+#        slice_index = (slice_index - 1)
+#        # offsets.append(offset)
 
       #Convert vtk to numpy
       magn_array = numpy_support.vtk_to_numpy(magn_scalars)
@@ -397,8 +397,8 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
 
       #2D Slice Selector
       ### 3 3D values are : numpy_magn , numpy_phase, mask
-      numpy_magn = numpy_magn[slice_index,:,:]
-      numpy_phase = numpy_phase[slice_index,:,:]
+      numpy_magn = numpy_magn[0,:,:]
+      numpy_phase = numpy_phase[0,:,:]
       #mask = mask[slice,:,:]
       numpy_magn_sliced = numpy_magn.astype(np.uint8)
 
@@ -463,11 +463,6 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
       pu_NumpyArray = numpy_support.vtk_to_numpy(pu_scalars)
       phaseunwrapped = pu_NumpyArray.reshape(pu_zed, pu_rows, pu_cols)
 
-    #Delete unwrapped_phase after I get the information from it 
-     # delete_unwrapped = slicer.mrmlScene.GetFirstNodeByName('Phase Unwrapping')
-     # slicer.mrmlScene.RemoveNode(delete_unwrapped)
-
-
       I = phaseunwrapped.squeeze()
       A = np.fft.fft2(I)
       A1 = np.fft.fftshift(A)
@@ -522,7 +517,7 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
       (y1,x1) = np.unravel_index(sort[0], meiji.shape) # best match
 
       point = (x1,y1)
-      coords = [x1,y1,slice_index]
+      coords = [x1,y1,0]
       circle1 = plt.Circle(point,2,color='red')
 
       # Create MRML transform node
@@ -550,8 +545,6 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
           fidNode1.RemoveAllMarkups()
       else:
         fidNode1 = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode", "needle_tip")
-      #  fidNode1.CreateDefaultDisplayNodes()
-      #  fidNode1.SetMaximumNumberOfControlPoints(1) 
 
       fidNode1.AddFiducialFromArray(coords)
       fidNode1.SetAndObserveTransformNodeID(transformNode.GetID())
@@ -568,10 +561,9 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
       slice_logic.GetSliceCompositeNode().SetBackgroundVolumeID(magnitudevolume.GetID())
 
       # view_selecter = slicer.mrmlScene.GetNodeByID('vtkMRMLSliceNode'+ str(viewSelecter))
-      view_selecter.SetFieldOfView(fov_0,fov_1,fov_2)
-      view_selecter.SetSliceOffset(offset)
+      #view_selecter.SetFieldOfView(fov_0,fov_1,fov_2)
+      #view_selecter.SetSliceOffset(offset)
       
-      #print ("Needle tip location",y1,x1)
       self.counter = 0
       return True
 
