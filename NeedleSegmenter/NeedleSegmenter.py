@@ -12,7 +12,6 @@ from skimage.feature import hessian_matrix, hessian_matrix_eigvals, peak_local_m
 import cv2
 import tempfile
 import time
-import SimpleITK as sitk
 
 class NeedleSegmenter(ScriptedLoadableModule):
 
@@ -374,7 +373,6 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
       magn_imageSpacing = magnitudevolume.GetSpacing()
       magn_matrix = vtk.vtkMatrix4x4()
       magnitudevolume.GetIJKToRASMatrix(magn_matrix)
-      # magnitudevolume.CreateDefaultDisplayNodes()
 
 
       # phase volume
@@ -382,31 +380,13 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
       phase_rows, phase_cols, phase_zed = phase_imageData.GetDimensions()
       phase_scalars = phase_imageData.GetPointData().GetScalars()
 
-
-      ## Find Slice location
-#      view_selecter = slicer.mrmlScene.GetNodeByID('vtkMRMLSliceNode'+ str(viewSelecter))
-#      fov_0,fov_1,fov_2 = view_selecter.GetFieldOfView()
-#      layoutManager = slicer.app.layoutManager()
-#      for sliceViewName in [''+ str(viewSelecter)]:
-#        sliceWidget = layoutManager.sliceWidget(sliceViewName)
-#        sliceWidgetLogic = sliceWidget.sliceLogic()
-#        offset = sliceWidgetLogic.GetSliceOffset()
-#        slice_index = sliceWidgetLogic.GetSliceIndexFromOffset(offset)
-#        slice_index = (slice_index - 1)
-#        # offsets.append(offset)
-
       #Convert vtk to numpy
       magn_array = numpy_support.vtk_to_numpy(magn_scalars)
       numpy_magn = magn_array.reshape(magn_zed, magn_rows, magn_cols)
       phase_array = numpy_support.vtk_to_numpy(phase_scalars)
       numpy_phase = phase_array.reshape(phase_zed, phase_rows, phase_cols)
 
-      # slice = int(slice_number)  
-      # slice = (slice_index)
-      # maskThreshold = int(maskThreshold)
-
       #2D Slice Selector
-      ### 3 3D values are : numpy_magn , numpy_phase, mask
       numpy_magn = numpy_magn[0,:,:]
       numpy_phase = numpy_phase[0,:,:]
       #mask = mask[slice,:,:]
@@ -481,7 +461,7 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
       [M, N] = A.shape
 
       # filter size parameter
-      R = 10
+      R = 5
 
       X = np.arange(0, N, 1)
       Y = np.arange(0, M, 1)
@@ -513,21 +493,16 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
       mask_borderless = mask_borderless[0 + border_size:y - border_size, 0 + border_size:x - border_size]
 
       B2 = cv2.bitwise_and(B2, B2, mask=mask_borderless)
+          
+      H_elems = hessian_matrix(B2, sigma=5, order='rc')
+      maxima_ridges, minima_ridges = hessian_matrix_eigvals(H_elems)
 
-      # ridgeOperator = int(ridgeOperator)
-      meiji = sato(B2, sigmas=(ridgeOperator, ridgeOperator), black_ridges=True)
-
-      #(minVal, maxVal, minLoc, maxLoc) = cv2.minMaxLoc(meiji)
-      
-      result2 = np.reshape(meiji, meiji.shape[0]*meiji.shape[1])
-      
-      ids = np.argpartition(result2, -51)[-51:]
-      sort = ids[np.argsort(result2[ids])[::-1]]
-      
-      (y1,x1) = np.unravel_index(sort[0], meiji.shape) # best match
-
-      point = (x1,y1)
-      coords = [x1,y1,0]
+      hessian_det = maxima_ridges + minima_ridges
+      coordinate= peak_local_max(maxima_ridges,num_peaks=1, min_distance=20,exclude_border=True, indices=True) 
+      x2 = np.asscalar(coordinate[:,1])
+      y2= np.asscalar(coordinate[:,0])
+      point = (x2,y2)
+      coords = [x2,y2,0]
       circle1 = plt.Circle(point,2,color='red')
 
       # Create MRML transform node
@@ -730,7 +705,6 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
       B2 = cv2.bitwise_and(B2, B2, mask=mask_borderless)
 
                 
-      ###TESTING
       H_elems = hessian_matrix(B2, sigma=5, order='rc')
       maxima_ridges, minima_ridges = hessian_matrix_eigvals(H_elems)
 
@@ -806,7 +780,6 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
  
   def needlefinder(self, magnitudevolume , phasevolume, imageSlice, maskThreshold, ridgeOperator,z_axis,viewSelecter, enableScreenshots=0):
 
-    #print ("THis is the processed image flag", enableProcessedFlag)
     #magnitude volume
     magn_imageData = magnitudevolume.GetImageData()
     magn_rows, magn_cols, magn_zed = magn_imageData.GetDimensions()
@@ -815,8 +788,6 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
     magn_imageSpacing = magnitudevolume.GetSpacing()
     magn_matrix = vtk.vtkMatrix4x4()
     magnitudevolume.GetIJKToRASMatrix(magn_matrix)
-    # magnitudevolume.CreateDefaultDisplayNodes()
-
 
     # phase volume
     phase_imageData = phasevolume.GetImageData()
@@ -846,15 +817,11 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
     phase_array = numpy_support.vtk_to_numpy(phase_scalars)
     numpy_phase = phase_array.reshape(phase_zed, phase_rows, phase_cols)
 
-    # slice = int(slice_number)  
-    # slice = (slice_index)
     maskThreshold = int(maskThreshold)
 
     #2D Slice Selector
-    ### 3 3D values are : numpy_magn , numpy_phase, mask
     numpy_magn = numpy_magn[slice_index,:,:]
     numpy_phase = numpy_phase[slice_index,:,:]
-    #mask = mask[slice,:,:]
     numpy_magn_sliced = numpy_magn.astype(np.uint8)
 
     #mask thresholding 
@@ -926,7 +893,7 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
     [M, N] = A.shape
 
     # filter size parameter
-    R = 10
+    R = 5
 
     X = np.arange(0, N, 1)
     Y = np.arange(0, M, 1)
@@ -959,22 +926,17 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
 
     B2 = cv2.bitwise_and(B2, B2, mask=mask_borderless)
 
-    ridgeOperator = int(ridgeOperator)
-    meiji = sato(B2, sigmas=(ridgeOperator, ridgeOperator), black_ridges=True)
+    H_elems = hessian_matrix(B2, sigma=5, order='rc')
+    maxima_ridges, minima_ridges = hessian_matrix_eigvals(H_elems)
 
-    #(minVal, maxVal, minLoc, maxLoc) = cv2.minMaxLoc(meiji)
-    
-    result2 = np.reshape(meiji, meiji.shape[0]*meiji.shape[1])
-    
-    ids = np.argpartition(result2, -51)[-51:]
-    sort = ids[np.argsort(result2[ids])[::-1]]
-    
-    (y1,x1) = np.unravel_index(sort[0], meiji.shape) # best match
-
-    point = (x1,y1)
-    coords = [x1,y1,slice_index]
+    hessian_det = maxima_ridges + minima_ridges
+    coordinate= peak_local_max(maxima_ridges,num_peaks=1, min_distance=20,exclude_border=True, indices=True) 
+    x2 = np.asscalar(coordinate[:,1])
+    y2= np.asscalar(coordinate[:,0])
+    point = (x2,y2)
+    coords = [x2,y2,slice_index]
     circle1 = plt.Circle(point,2,color='red')
-
+      
     # Create MRML transform node
     
     transforms = slicer.mrmlScene.GetNodesByClassByName('vtkMRMLLinearTransformNode','Transform')
