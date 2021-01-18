@@ -8,16 +8,12 @@ import numpy as np
 from vtk.util import numpy_support
 import matplotlib.pyplot as plt
 from scipy import ndimage
-from skimage.filters import meijering, sato, hessian
 from skimage.feature import hessian_matrix, hessian_matrix_eigvals, peak_local_max
-from sklearn.cluster import KMeans
-from sklearn.neighbors import NearestCentroid
-from pandas import DataFrame
 import cv2
 import tempfile
 import time
 import SimpleITK as sitk
-import itk
+
 class NeedleSegmenter(ScriptedLoadableModule):
 
   def __init__(self, parent):
@@ -653,10 +649,8 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
       mask = np.zeros( [width, height, 3],dtype=np.uint8 )
       cv2.fillPoly(mask, pts =[cmax], color=(255,255,255))
       mask = mask[:,:,0]
-      ### TODO replace the current vtk image data to use python wrapped itk module
       phase_cropped = cv2.bitwise_and(numpy_phase, numpy_phase, mask=mask)
       phase_cropped =  np.expand_dims(phase_cropped, axis=0)
-     # phase_cropped_itk = sitk.GetImageFromArray(phase_cropped)
       
       node = slicer.vtkMRMLScalarVolumeNode()
       node.SetName('phase_cropped')
@@ -670,9 +664,6 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
       unwrapped_phase = slicer.vtkMRMLScalarVolumeNode()
       unwrapped_phase.SetName('unwrapped_phase')
       slicer.mrmlScene.AddNode(unwrapped_phase)
-
-      elapsed_time = (time.time()-start)
-      print("Volume loading and mask creation: ", elapsed_time)
 
       #
       # Run phase unwrapping module
@@ -744,8 +735,6 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
       maxima_ridges, minima_ridges = hessian_matrix_eigvals(H_elems)
 
       hessian_det = maxima_ridges + minima_ridges
-      elapsed_time = (time.time()-start)
-      print('Gaussian and Hessian filtering: ',elapsed_time)
       coordinate= peak_local_max(maxima_ridges,num_peaks=1, min_distance=20,exclude_border=True, indices=True) 
       x2 = np.asscalar(coordinate[:,1])
       y2= np.asscalar(coordinate[:,0])
