@@ -1,5 +1,5 @@
 download the following packages to python inside 3Dslicer using :
-slicer.util.pip_install(package)
+slicer.util.pip_install('package')
 
 1. scipy ==0.15.0 (important to use this version and not the latest)
 2. scikit-image
