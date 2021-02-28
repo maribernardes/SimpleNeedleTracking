@@ -465,7 +465,7 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
     [M, N] = A.shape
 
     # filter size parameter
-    R = 10
+    R = 5
 
     X = np.arange(0, N, 1)
     Y = np.arange(0, M, 1)
@@ -506,7 +506,7 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
     x2 = np.asscalar(coordinate[:,1])
     y2= np.asscalar(coordinate[:,0])
     point = (x2,y2)
-    coords = [x2,y2,0]
+    coords = [x2,y2,slice_index]
     circle1 = plt.Circle(point,2,color='red')
 
     # Find or create MRML transform node
@@ -550,7 +550,7 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
     sliceNode = slicer.mrmlScene.GetNodeByID('vtkMRMLSliceNode'+ str(viewSelecter))
     fov_0,fov_1,fov_2 = sliceNode.GetFieldOfView()
     layoutManager = slicer.app.layoutManager()
-    slice_index = None
+    #slice_index = None
     offset = 0.0
     for sliceViewName in [''+ str(viewSelecter)]:
       sliceWidget = layoutManager.sliceWidget(sliceViewName)
