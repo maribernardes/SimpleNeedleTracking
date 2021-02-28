@@ -8,6 +8,7 @@ import numpy as np
 from vtk.util import numpy_support
 from scipy import ndimage
 from skimage.filters import meijering, sato
+import skiimage.feature import hessian_matrix, hessian_matrix_eigvals
 import cv2
 import tempfile
 import matplotlib.pyplot as plt
@@ -88,21 +89,6 @@ class NeedleSegmenterWidget(ScriptedLoadableModuleWidget):
     self.phasevolume.setToolTip("Select the phase image")
     parametersFormLayout.addRow("Phase Image: ", self.phasevolume)
    
-    #
-    # True phase points (vtkMRMLMarkupsFiducialNode)
-    #
-    self.truePhasePointSelector = slicer.qMRMLNodeComboBox()
-    self.truePhasePointSelector.nodeTypes = ( ("vtkMRMLMarkupsFiducialNode"), "" )
-    self.truePhasePointSelector.addEnabled = True
-    self.truePhasePointSelector.removeEnabled = False
-    self.truePhasePointSelector.noneEnabled = True
-    self.truePhasePointSelector.showHidden = False
-    self.truePhasePointSelector.renameEnabled = True
-    self.truePhasePointSelector.showChildNodeTypes = False
-    self.truePhasePointSelector.setMRMLScene( slicer.mrmlScene )
-    self.truePhasePointSelector.setToolTip( "Pick up a Markups node listing a true phase point." )
-    parametersFormLayout.addRow("True Phase Point: ", self.truePhasePointSelector)
-
     #
     # Select which scene view to track
     #
@@ -323,7 +309,7 @@ class NeedleSegmenterWidget(ScriptedLoadableModuleWidget):
     viewSelecter = self.getViewSelecter()
     maskThreshold = self.maskThresholdWidget.value
     ridgeOperator = self.ridgeOperatorWidget.value
-    logic.needlefinder(self.magnitudevolume.currentNode(), self.phasevolume.currentNode(), self.truePhasePointSelector.currentNode(), maskThreshold, ridgeOperator, viewSelecter)
+    logic.needlefinder(self.magnitudevolume.currentNode(), self.phasevolume.currentNode(), maskThreshold, ridgeOperator, viewSelecter)
 
   def onRealTimeTracking(self):
     self.counter = 0
@@ -332,7 +318,7 @@ class NeedleSegmenterWidget(ScriptedLoadableModuleWidget):
     viewSelecter = self.getViewSelecter()
     maskThreshold = self.maskThresholdWidget.value
     ridgeOperator = self.ridgeOperatorWidget.value
-    logic.realtime(self.magnitudevolume.currentNode(), self.phasevolume.currentNode(), self.truePhasePointSelector.currentNode(), maskThreshold, ridgeOperator, viewSelecter, self.counter, self.lastMatrix)
+    logic.realtime(self.magnitudevolume.currentNode(), self.phasevolume.currentNode(), maskThreshold, ridgeOperator, viewSelecter, self.counter, self.lastMatrix)
 
   def SRCRealTimeTracking(self):
   #set observer node so that i can the image as it updates
@@ -341,14 +327,14 @@ class NeedleSegmenterWidget(ScriptedLoadableModuleWidget):
     viewSelecter = self.getViewSelecter()      
     maskThreshold = self.maskThresholdWidget.value
     ridgeOperator = self.ridgeOperatorWidget.value
-    logic.SRCrealtime(self.magnitudevolume.currentNode(), self.phasevolume.currentNode(), self.truePhasePointSelector.currentNode(), maskThreshold, ridgeOperator, viewSelecter, self.counter)
+    logic.SRCrealtime(self.magnitudevolume.currentNode(), self.phasevolume.currentNode(), maskThreshold, ridgeOperator, viewSelecter, self.counter)
 
   def onApplyButton(self):
     logic = NeedleSegmenterLogic()
     imageSlice = self.imageSliceSliderWidget.value
     maskThreshold = self.maskThresholdWidget.value
     ridgeOperator = self.ridgeOperatorWidget.value
-    logic.run(self.magnitudevolume.currentNode(), self.phasevolume.currentNode(), self.truePhasePointSelector.currentNode(), imageSlice, maskThreshold, ridgeOperator)
+    logic.run(self.magnitudevolume.currentNode(), self.phasevolume.currentNode(), imageSlice, maskThreshold, ridgeOperator)
 
   def onReload(self,moduleName="NeedleSegmenter"):
     """Generic reload method for any scripted module.
@@ -376,7 +362,7 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
       return False
     return True
 
-  def detectNeedle(self, magnitudevolume, phasevolume, truePhasePoint, maskThreshold, ridgeOperator, slice_index):
+  def detectNeedle(self, magnitudevolume, phasevolume, maskThreshold, ridgeOperator, slice_index):
 
     #magnitude volume
     magn_imageData = magnitudevolume.GetImageData()
@@ -457,7 +443,7 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
     cli_input = slicer.util.getFirstNodeByName('phase_cropped')
     cli_output = slicer.util.getNode('unwrapped_phase')
 
-    cli_params = {'inputVolume': cli_input, 'outputVolume': cli_output, 'truePhase': truePhasePoint}
+    cli_params = {'inputVolume': cli_input, 'outputVolume': cli_output}
     self.cliParamNode = slicer.cli.runSync(slicer.modules.phaseunwrapping, node=self.cliParamNode, parameters=cli_params)
 
     pu_imageData = unwrapped_phase.GetImageData()
@@ -469,9 +455,6 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
     # for debug
     self.phaseunwrapped_numpy = pu_NumpyArray.reshape(pu_cols,pu_rows)
 
-    #Delete unwrapped_phase after I get the information from it 
-    # delete_unwrapped = slicer.mrmlScene.GetFirstNodeByName('Phase Unwrapping')
-    # slicer.mrmlScene.RemoveNode(delete_unwrapped)
 
     I = phaseunwrapped.squeeze()
     A = np.fft.fft2(I)
@@ -596,12 +579,12 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
     return (slice_index, sliceNode, fov, offset)
   
   
-  def SRCrealtime(self, magnitudevolume , phasevolume, truePhasePoint, maskThreshold, ridgeOperator,viewSelecter, counter):
+  def SRCrealtime(self, magnitudevolume , phasevolume, maskThreshold, ridgeOperator,viewSelecter, counter):
     
     # (slice_index, sliceNode, fov, offset) = self.findSliceIndex(viewSelecter)
     slice_index = 0   
 
-    self.detectNeedle(magnitudevolume , phasevolume, truePhasePoint, maskThreshold, ridgeOperator, slice_index)
+    self.detectNeedle(magnitudevolume , phasevolume, maskThreshold, ridgeOperator, slice_index)
 
     ## Setting the Slice view 
     slice_logic = slicer.app.layoutManager().sliceWidget(''+ str(viewSelecter)).sliceLogic()
@@ -613,7 +596,7 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
     #sliceNode.SetSliceOffset(offset)
 
     
-  def realtime(self, magnitudevolume , phasevolume, truePhasePoint, maskThreshold, ridgeOperator,viewSelecter, counter, lastMatrix):
+  def realtime(self, magnitudevolume , phasevolume, maskThreshold, ridgeOperator,viewSelecter, counter, lastMatrix):
 
     ## Counter is disabled for current use, only updates when slice view changes
     inputransform = slicer.mrmlScene.GetNodeByID('vtkMRMLSliceNode'+ str(viewSelecter)).GetXYToRAS()
@@ -622,7 +605,7 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
       
     if (not self.CompareMatrices(lastMatrix, inputransform) or counter >= 20) :
 
-      self.detectNeedle(magnitudevolume , phasevolume, truePhasePoint, maskThreshold, ridgeOperator, slice_index)
+      self.detectNeedle(magnitudevolume , phasevolume, maskThreshold, ridgeOperator, slice_index)
      
       ## Setting the Slice view 
       slice_logic = slicer.app.layoutManager().sliceWidget(''+ str(viewSelecter)).sliceLogic()
@@ -650,11 +633,11 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
     return True
 
 
-  def needlefinder(self, magnitudevolume , phasevolume, truePhasePoint, maskThreshold, ridgeOperator, viewSelecter):
+  def needlefinder(self, magnitudevolume , phasevolume, maskThreshold, ridgeOperator, viewSelecter):
 
     (slice_index, sliceNode, fov, offset) = self.findSliceIndex(viewSelecter)
 
-    self.detectNeedle(magnitudevolume , phasevolume, truePhasePoint, maskThreshold, ridgeOperator, slice_index)
+    self.detectNeedle(magnitudevolume , phasevolume, maskThreshold, ridgeOperator, slice_index)
 
     ## Setting the Slice view 
     slice_logic = slicer.app.layoutManager().sliceWidget(''+ str(viewSelecter)).sliceLogic()
@@ -671,11 +654,11 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
     #   view_selecter.SetSliceOffset(y_ras)
 
 
-  def run(self, magnitudevolume , phasevolume, truePhasePoint, imageSlice, maskThreshold, ridgeOperator):
+  def run(self, magnitudevolume , phasevolume, imageSlice, maskThreshold, ridgeOperator):
 
     slice_index = int(imageSlice)
 
-    self.detectNeedle(magnitudevolume , phasevolume, truePhasePoint, maskThreshold, ridgeOperator, slice_index)
+    self.detectNeedle(magnitudevolume , phasevolume, maskThreshold, ridgeOperator, slice_index)
 
     fig, axs = plt.subplots(1,3)
     fig.suptitle('Needle Tracking')
