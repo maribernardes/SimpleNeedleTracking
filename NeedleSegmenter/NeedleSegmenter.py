@@ -8,6 +8,8 @@ import numpy as np
 from vtk.util import numpy_support
 from scipy import ndimage
 from skimage.filters import meijering, sato
+from skimage.feature import hessian_matrix, hessian_matrix_eigvals
+from skimage.feature import peak_local_max
 import cv2
 import tempfile
 #import matplotlib.pyplot as plt
@@ -417,7 +419,6 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
     #sitkUtils.PushVolumeToSlicer(phaseCroppedUnwrapped, 'phase_cropped_unwrapped', 0, True)
     self.pushSitkToSlicer(phaseCroppedUnwrapped, 'phase_cropped_unwrapped')
     
-    
     phaseunwrapped = sitk.GetArrayFromImage(phaseCroppedUnwrapped)
 
     I = phaseunwrapped.squeeze()
@@ -428,7 +429,7 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
     [M, N] = A.shape
 
     # filter size parameter
-    R = 10
+    R = 5
 
     X = np.arange(0, N, 1)
     Y = np.arange(0, M, 1)
@@ -460,38 +461,49 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
     mask_borderless = mask_borderless[0 + border_size:y - border_size, 0 + border_size:x - border_size]
 
     B2 = cv2.bitwise_and(B2, B2, mask=mask_borderless)
-
-    # for debug
-    self.mask_borderless = mask_borderless
-
-    # Sato tubeness filter
-    # ridgeOperator = int(ridgeOperator)
-    meiji = sato(B2, sigmas=(ridgeOperator, ridgeOperator), black_ridges=True)
-
-    #(minVal, maxVal, minLoc, maxLoc) = cv2.minMaxLoc(meiji)
-
-    result2 = np.reshape(meiji, meiji.shape[0]*meiji.shape[1])
-
-    meiji2 = meiji.reshape(phaseunwrapped.shape)
-    sitk_meiji2 = sitk.GetImageFromArray(meiji2)
-    sitk_meiji2.SetOrigin(sitk_magn.GetOrigin())
-    sitk_meiji2.SetSpacing(sitk_magn.GetSpacing())
-    sitk_meiji2.SetDirection(sitk_magn.GetDirection())
-    self.pushSitkToSlicer(sitk_meiji2, 'meiji')
     
-    ids = np.argpartition(result2, -51)[-51:]
-    sort = ids[np.argsort(result2[ids])[::-1]]
-    
-    (y1,x1) = np.unravel_index(sort[0], meiji.shape) # best match
+#<<<<<<< HEAD
+#
+#    # for debug
+#    self.mask_borderless = mask_borderless
+#
+#    # Sato tubeness filter
+#    # ridgeOperator = int(ridgeOperator)
+#    meiji = sato(B2, sigmas=(ridgeOperator, ridgeOperator), black_ridges=True)
+#
+#    #(minVal, maxVal, minLoc, maxLoc) = cv2.minMaxLoc(meiji)
+#
+#    result2 = np.reshape(meiji, meiji.shape[0]*meiji.shape[1])
+#
+#    meiji2 = meiji.reshape(phaseunwrapped.shape)
+#    sitk_meiji2 = sitk.GetImageFromArray(meiji2)
+#    sitk_meiji2.SetOrigin(sitk_magn.GetOrigin())
+#    sitk_meiji2.SetSpacing(sitk_magn.GetSpacing())
+#    sitk_meiji2.SetDirection(sitk_magn.GetDirection())
+#    self.pushSitkToSlicer(sitk_meiji2, 'meiji')
+#    
+#    ids = np.argpartition(result2, -51)[-51:]
+#    sort = ids[np.argsort(result2[ids])[::-1]]
+#    
+#    (y1,x1) = np.unravel_index(sort[0], meiji.shape) # best match
+#
+#    self.meiji = meiji
+#
+#    point = (x1,y1)
+#    coords = [x1,y1,slice_index]
+#    #circle1 = plt.Circle(point,2,color='red')
+#=======
+             
+    H_elems = hessian_matrix(B2, sigma=5, order='rc')
+    maxima_ridges, minima_ridges = hessian_matrix_eigvals(H_elems)
 
-    self.meiji = meiji
-
-    point = (x1,y1)
-    coords = [x1,y1,slice_index]
+    hessian_det = maxima_ridges + minima_ridges
+    coordinate= peak_local_max(maxima_ridges,num_peaks=1, min_distance=20,exclude_border=True, indices=True) 
+    x2 = np.asscalar(coordinate[:,1])
+    y2= np.asscalar(coordinate[:,0])
+    point = (x2,y2)
+    coords = [x2,y2,slice_index]
     #circle1 = plt.Circle(point,2,color='red')
-
-    self.x1 = x1
-    self.y1 = y1
 
     # Find or create MRML transform node
     transformNode = None
@@ -525,8 +537,6 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
     slicer.mrmlScene.RemoveNode(delete_unwrapped)
 
 
-    #print ("Needle tip location",y1,x1)
-    #self.counter = 0
     return True
 
   
@@ -554,7 +564,7 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
     sliceNode = slicer.mrmlScene.GetNodeByID('vtkMRMLSliceNode'+ str(viewSelecter))
     fov_0,fov_1,fov_2 = sliceNode.GetFieldOfView()
     layoutManager = slicer.app.layoutManager()
-    slice_index = None
+    #slice_index = None
     offset = 0.0
     for sliceViewName in [''+ str(viewSelecter)]:
       sliceWidget = layoutManager.sliceWidget(sliceViewName)
@@ -618,7 +628,6 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
     for i in range(0,4):
       for j in range(0,4):
         if m.GetElement(i,j) != n.GetElement(i,j):
-          print ("HII Processing new slice ...")
           return False
     return True
 
@@ -649,7 +658,7 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
     slice_index = int(imageSlice)
 
     self.detectNeedle(magnitudevolume , phasevolume, maskThreshold, ridgeOperator, slice_index)
-
+    
     #fig, axs = plt.subplots(1,3)
     #fig.suptitle('Needle Tracking')
     #
