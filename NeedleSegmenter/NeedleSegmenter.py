@@ -10,7 +10,10 @@ from scipy import ndimage
 from skimage.filters import meijering, sato
 import cv2
 import tempfile
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
+from skimage.restoration import unwrap_phase
+import SimpleITK as sitk
+import sitkUtils
 
 
 class NeedleSegmenter(ScriptedLoadableModule):
@@ -30,24 +33,6 @@ class NeedleSegmenterWidget(ScriptedLoadableModuleWidget):
 
   def setup(self):
     ScriptedLoadableModuleWidget.setup(self)
-
-    ####################
-    # For debugging
-    #
-    # Reload and Test area
-    reloadCollapsibleButton = ctk.ctkCollapsibleButton()
-    reloadCollapsibleButton.text = "Reload && Test"
-    self.layout.addWidget(reloadCollapsibleButton)
-    reloadFormLayout = qt.QFormLayout(reloadCollapsibleButton)
-    
-    # reload button
-    # (use this during development, but remove it when delivering
-    #  your module to users)
-    self.reloadButton = qt.QPushButton("Reload")
-    self.reloadButton.toolTip = "Reload this module."
-    self.reloadButton.name = "Reload"
-    reloadFormLayout.addWidget(self.reloadButton)
-    self.reloadButton.connect('clicked()', self.onReload)
 
     #
     # Parameters Area
@@ -88,21 +73,6 @@ class NeedleSegmenterWidget(ScriptedLoadableModuleWidget):
     self.phasevolume.setToolTip("Select the phase image")
     parametersFormLayout.addRow("Phase Image: ", self.phasevolume)
    
-    #
-    # True phase points (vtkMRMLMarkupsFiducialNode)
-    #
-    self.truePhasePointSelector = slicer.qMRMLNodeComboBox()
-    self.truePhasePointSelector.nodeTypes = ( ("vtkMRMLMarkupsFiducialNode"), "" )
-    self.truePhasePointSelector.addEnabled = True
-    self.truePhasePointSelector.removeEnabled = False
-    self.truePhasePointSelector.noneEnabled = True
-    self.truePhasePointSelector.showHidden = False
-    self.truePhasePointSelector.renameEnabled = True
-    self.truePhasePointSelector.showChildNodeTypes = False
-    self.truePhasePointSelector.setMRMLScene( slicer.mrmlScene )
-    self.truePhasePointSelector.setToolTip( "Pick up a Markups node listing a true phase point." )
-    parametersFormLayout.addRow("True Phase Point: ", self.truePhasePointSelector)
-
     #
     # Select which scene view to track
     #
@@ -323,7 +293,7 @@ class NeedleSegmenterWidget(ScriptedLoadableModuleWidget):
     viewSelecter = self.getViewSelecter()
     maskThreshold = self.maskThresholdWidget.value
     ridgeOperator = self.ridgeOperatorWidget.value
-    logic.needlefinder(self.magnitudevolume.currentNode(), self.phasevolume.currentNode(), self.truePhasePointSelector.currentNode(), maskThreshold, ridgeOperator, viewSelecter)
+    logic.needlefinder(self.magnitudevolume.currentNode(), self.phasevolume.currentNode(), maskThreshold, ridgeOperator, viewSelecter)
 
   def onRealTimeTracking(self):
     self.counter = 0
@@ -332,7 +302,7 @@ class NeedleSegmenterWidget(ScriptedLoadableModuleWidget):
     viewSelecter = self.getViewSelecter()
     maskThreshold = self.maskThresholdWidget.value
     ridgeOperator = self.ridgeOperatorWidget.value
-    logic.realtime(self.magnitudevolume.currentNode(), self.phasevolume.currentNode(), self.truePhasePointSelector.currentNode(), maskThreshold, ridgeOperator, viewSelecter, self.counter, self.lastMatrix)
+    logic.realtime(self.magnitudevolume.currentNode(), self.phasevolume.currentNode(), maskThreshold, ridgeOperator, viewSelecter, self.counter, self.lastMatrix)
 
   def SRCRealTimeTracking(self):
   #set observer node so that i can the image as it updates
@@ -341,20 +311,14 @@ class NeedleSegmenterWidget(ScriptedLoadableModuleWidget):
     viewSelecter = self.getViewSelecter()      
     maskThreshold = self.maskThresholdWidget.value
     ridgeOperator = self.ridgeOperatorWidget.value
-    logic.SRCrealtime(self.magnitudevolume.currentNode(), self.phasevolume.currentNode(), self.truePhasePointSelector.currentNode(), maskThreshold, ridgeOperator, viewSelecter, self.counter)
+    logic.SRCrealtime(self.magnitudevolume.currentNode(), self.phasevolume.currentNode(), maskThreshold, ridgeOperator, viewSelecter, self.counter)
 
   def onApplyButton(self):
     logic = NeedleSegmenterLogic()
     imageSlice = self.imageSliceSliderWidget.value
     maskThreshold = self.maskThresholdWidget.value
     ridgeOperator = self.ridgeOperatorWidget.value
-    logic.run(self.magnitudevolume.currentNode(), self.phasevolume.currentNode(), self.truePhasePointSelector.currentNode(), imageSlice, maskThreshold, ridgeOperator)
-
-  def onReload(self,moduleName="NeedleSegmenter"):
-    """Generic reload method for any scripted module.
-    ModuleWizard will subsitute correct default moduleName.
-    """
-    globals()[moduleName] = slicer.util.reloadScriptedModule(moduleName)
+    logic.run(self.magnitudevolume.currentNode(), self.phasevolume.currentNode(), imageSlice, maskThreshold, ridgeOperator)
 
     
 class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
@@ -376,28 +340,15 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
       return False
     return True
 
-  def detectNeedle(self, magnitudevolume, phasevolume, truePhasePoint, maskThreshold, ridgeOperator, slice_index):
+  def detectNeedle(self, magnitudevolume, phasevolume, maskThreshold, ridgeOperator, slice_index):
 
-    #magnitude volume
-    magn_imageData = magnitudevolume.GetImageData()
-    magn_rows, magn_cols, magn_zed = magn_imageData.GetDimensions()
-    magn_scalars = magn_imageData.GetPointData().GetScalars()
-    magn_imageOrigin = magnitudevolume.GetOrigin()
-    magn_imageSpacing = magnitudevolume.GetSpacing()
     magn_matrix = vtk.vtkMatrix4x4()
     magnitudevolume.GetIJKToRASMatrix(magn_matrix)
-    # magnitudevolume.CreateDefaultDisplayNodes()
 
-    # phase volume
-    phase_imageData = phasevolume.GetImageData()
-    phase_rows, phase_cols, phase_zed = phase_imageData.GetDimensions()
-    phase_scalars = phase_imageData.GetPointData().GetScalars()
-    
-    #Convert vtk to numpy
-    magn_array = numpy_support.vtk_to_numpy(magn_scalars)
-    numpy_magn = magn_array.reshape(magn_zed, magn_rows, magn_cols)
-    phase_array = numpy_support.vtk_to_numpy(phase_scalars)
-    numpy_phase = phase_array.reshape(phase_zed, phase_rows, phase_cols)
+    sitk_magn = sitkUtils.PullVolumeFromSlicer(magnitudevolume)
+    sitk_phase = sitkUtils.PullVolumeFromSlicer(phasevolume)
+    numpy_magn = sitk.GetArrayFromImage(sitk_magn)
+    numpy_phase = sitk.GetArrayFromImage(sitk_phase)
     
     # slice = int(slice_number)  
     # slice = (slice_index)
@@ -432,46 +383,42 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
     phase_cropped = cv2.bitwise_and(numpy_phase, numpy_phase, mask=mask)
     phase_cropped =  np.expand_dims(phase_cropped, axis=0)
 
-    node = slicer.vtkMRMLScalarVolumeNode()
-    node.SetName('phase_cropped')
-    slicer.mrmlScene.AddNode(node)
+    sitk_phase_cropped = sitk.GetImageFromArray(phase_cropped)
+    sitk_phase_cropped.SetOrigin(sitk_magn.GetOrigin())
+    sitk_phase_cropped.SetSpacing(sitk_magn.GetSpacing())
+    sitk_phase_cropped.SetDirection(sitk_magn.GetDirection())
 
-    slicer.util.updateVolumeFromArray(node, phase_cropped)
-    node.SetOrigin(magn_imageOrigin)
-    node.SetSpacing(magn_imageSpacing)
-    node.SetIJKToRASDirectionMatrix(magn_matrix)
+    #node_phase_cropped = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLScalarVolumeNode')
+    #node_phase_cropped.SetName('phase_cropped')
+    #sitkUtils.PushVolumeToSlicer(sitk_phase_cropped, 'phase_cropped', 0, True)
+    self.pushSitkToSlicer(sitk_phase_cropped, 'phase_cropped')
 
-    unwrapped_phase = slicer.vtkMRMLScalarVolumeNode()
-    unwrapped_phase.SetName('unwrapped_phase')
-    slicer.mrmlScene.AddNode(unwrapped_phase)
-
-    #
-    # Run phase unwrapping module
-    #
-    parameter_name = slicer.mrmlScene.GetNodeByID('vtkMRMLCommandLineModuleNode1')
+    #unwrapping
+    phaseCroppedNode = slicer.util.getFirstNodeByName('phase_cropped')
+    phaseCropped = sitk.Cast(sitkUtils.PullVolumeFromSlicer(phaseCroppedNode), sitk.sitkFloat64)
+    #phaseCropped = sitk.Cast(sitk_phase_cropped, sitk.sitkFloat64)
     
-    if parameter_name is None:
-        slicer.cli.createNode(slicer.modules.phaseunwrapping)
+    pcImageData = phaseCroppedNode.GetImageData()
+    scalarType = ''
+    if pcImageData != None:
+      scalarType = pcImageData.GetScalarTypeAsString()
+
+    # Scale to radian
+    if scalarType == 'unsigned short':
+      print('pcImageData*numpy.pi/2048.0 - numpy.pi')
+      phaseCropped = phaseCropped*np.pi/2048.0 - np.pi
     else:
-        pass
-    cli_input = slicer.util.getFirstNodeByName('phase_cropped')
-    cli_output = slicer.util.getNode('unwrapped_phase')
-
-    cli_params = {'inputVolume': cli_input, 'outputVolume': cli_output, 'truePhase': truePhasePoint}
-    self.cliParamNode = slicer.cli.runSync(slicer.modules.phaseunwrapping, node=self.cliParamNode, parameters=cli_params)
-
-    pu_imageData = unwrapped_phase.GetImageData()
-    pu_rows, pu_cols, pu_zed = pu_imageData.GetDimensions()
-    pu_scalars = pu_imageData.GetPointData().GetScalars()
-    pu_NumpyArray = numpy_support.vtk_to_numpy(pu_scalars)
-    phaseunwrapped = pu_NumpyArray.reshape(pu_zed, pu_rows, pu_cols)
-
-    # for debug
-    self.phaseunwrapped_numpy = pu_NumpyArray.reshape(pu_cols,pu_rows)
-
-    #Delete unwrapped_phase after I get the information from it 
-    # delete_unwrapped = slicer.mrmlScene.GetFirstNodeByName('Phase Unwrapping')
-    # slicer.mrmlScene.RemoveNode(delete_unwrapped)
+      print('pcImageData*numpy.pi/4096.0')
+      phaseCropped = phaseCropped*np.pi/4096.0
+    
+    phaseCroppedUnwrapped  = self.unwrap(phaseCropped)
+    #node_phase_cropped_unwrapped = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLScalarVolumeNode')
+    #node_phase_cropped_unwrapped.SetName('phase_cropped_unwrapped')
+    #sitkUtils.PushVolumeToSlicer(phaseCroppedUnwrapped, 'phase_cropped_unwrapped', 0, True)
+    self.pushSitkToSlicer(phaseCroppedUnwrapped, 'phase_cropped_unwrapped')
+    
+    
+    phaseunwrapped = sitk.GetArrayFromImage(phaseCroppedUnwrapped)
 
     I = phaseunwrapped.squeeze()
     A = np.fft.fft2(I)
@@ -517,12 +464,20 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
     # for debug
     self.mask_borderless = mask_borderless
 
+    # Sato tubeness filter
     # ridgeOperator = int(ridgeOperator)
     meiji = sato(B2, sigmas=(ridgeOperator, ridgeOperator), black_ridges=True)
 
     #(minVal, maxVal, minLoc, maxLoc) = cv2.minMaxLoc(meiji)
-    
+
     result2 = np.reshape(meiji, meiji.shape[0]*meiji.shape[1])
+
+    meiji2 = meiji.reshape(phaseunwrapped.shape)
+    sitk_meiji2 = sitk.GetImageFromArray(meiji2)
+    sitk_meiji2.SetOrigin(sitk_magn.GetOrigin())
+    sitk_meiji2.SetSpacing(sitk_magn.GetSpacing())
+    sitk_meiji2.SetDirection(sitk_magn.GetDirection())
+    self.pushSitkToSlicer(sitk_meiji2, 'meiji')
     
     ids = np.argpartition(result2, -51)[-51:]
     sort = ids[np.argsort(result2[ids])[::-1]]
@@ -533,7 +488,7 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
 
     point = (x1,y1)
     coords = [x1,y1,slice_index]
-    circle1 = plt.Circle(point,2,color='red')
+    #circle1 = plt.Circle(point,2,color='red')
 
     self.x1 = x1
     self.y1 = y1
@@ -574,6 +529,24 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
     #self.counter = 0
     return True
 
+  
+  def unwrap(self, imagePhase):
+    imagePhaseNP = sitk.GetArrayFromImage(imagePhase)
+    imageUnwrappedNP = unwrap_phase(imagePhaseNP)
+    imageUnwrapped = sitk.GetImageFromArray(imageUnwrappedNP)
+    imageUnwrapped.SetOrigin(imagePhase.GetOrigin())
+    imageUnwrapped.SetSpacing(imagePhase.GetSpacing())
+    imageUnwrapped.SetDirection(imagePhase.GetDirection())
+    
+    return imageUnwrapped
+
+
+  def pushSitkToSlicer(self, sitkImage, name):
+    node = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLScalarVolumeNode')
+    node.SetName(name)
+    sitkUtils.PushVolumeToSlicer(sitkImage, name, 0, True)
+
+  
 
   def findSliceIndex(self, viewSelecter):
     
@@ -596,12 +569,12 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
     return (slice_index, sliceNode, fov, offset)
   
   
-  def SRCrealtime(self, magnitudevolume , phasevolume, truePhasePoint, maskThreshold, ridgeOperator,viewSelecter, counter):
+  def SRCrealtime(self, magnitudevolume , phasevolume, maskThreshold, ridgeOperator,viewSelecter, counter):
     
     # (slice_index, sliceNode, fov, offset) = self.findSliceIndex(viewSelecter)
     slice_index = 0   
 
-    self.detectNeedle(magnitudevolume , phasevolume, truePhasePoint, maskThreshold, ridgeOperator, slice_index)
+    self.detectNeedle(magnitudevolume , phasevolume, maskThreshold, ridgeOperator, slice_index)
 
     ## Setting the Slice view 
     slice_logic = slicer.app.layoutManager().sliceWidget(''+ str(viewSelecter)).sliceLogic()
@@ -613,7 +586,7 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
     #sliceNode.SetSliceOffset(offset)
 
     
-  def realtime(self, magnitudevolume , phasevolume, truePhasePoint, maskThreshold, ridgeOperator,viewSelecter, counter, lastMatrix):
+  def realtime(self, magnitudevolume , phasevolume, maskThreshold, ridgeOperator,viewSelecter, counter, lastMatrix):
 
     ## Counter is disabled for current use, only updates when slice view changes
     inputransform = slicer.mrmlScene.GetNodeByID('vtkMRMLSliceNode'+ str(viewSelecter)).GetXYToRAS()
@@ -622,7 +595,7 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
       
     if (not self.CompareMatrices(lastMatrix, inputransform) or counter >= 20) :
 
-      self.detectNeedle(magnitudevolume , phasevolume, truePhasePoint, maskThreshold, ridgeOperator, slice_index)
+      self.detectNeedle(magnitudevolume , phasevolume, maskThreshold, ridgeOperator, slice_index)
      
       ## Setting the Slice view 
       slice_logic = slicer.app.layoutManager().sliceWidget(''+ str(viewSelecter)).sliceLogic()
@@ -650,11 +623,11 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
     return True
 
 
-  def needlefinder(self, magnitudevolume , phasevolume, truePhasePoint, maskThreshold, ridgeOperator, viewSelecter):
+  def needlefinder(self, magnitudevolume , phasevolume, maskThreshold, ridgeOperator, viewSelecter):
 
     (slice_index, sliceNode, fov, offset) = self.findSliceIndex(viewSelecter)
 
-    self.detectNeedle(magnitudevolume , phasevolume, truePhasePoint, maskThreshold, ridgeOperator, slice_index)
+    self.detectNeedle(magnitudevolume , phasevolume, maskThreshold, ridgeOperator, slice_index)
 
     ## Setting the Slice view 
     slice_logic = slicer.app.layoutManager().sliceWidget(''+ str(viewSelecter)).sliceLogic()
@@ -671,23 +644,23 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
     #   view_selecter.SetSliceOffset(y_ras)
 
 
-  def run(self, magnitudevolume , phasevolume, truePhasePoint, imageSlice, maskThreshold, ridgeOperator):
+  def run(self, magnitudevolume , phasevolume, imageSlice, maskThreshold, ridgeOperator):
 
     slice_index = int(imageSlice)
 
-    self.detectNeedle(magnitudevolume , phasevolume, truePhasePoint, maskThreshold, ridgeOperator, slice_index)
+    self.detectNeedle(magnitudevolume , phasevolume, maskThreshold, ridgeOperator, slice_index)
 
-    fig, axs = plt.subplots(1,3)
-    fig.suptitle('Needle Tracking')
-
-    axs[0].imshow(self.phaseunwrapped_numpy, cmap='gray')
-    axs[1].imshow(self.meiji, cmap='hsv')
-    axs[1].axis('off')
-    axs[2].imshow(self.mask_borderless,zorder=1, cmap='gray')
-    axs[2].scatter(self.x1,self.y1,zorder=2, s=1)
-    axs[2].axis('off')
-    plt.savefig('mygraph.png')
-
+    #fig, axs = plt.subplots(1,3)
+    #fig.suptitle('Needle Tracking')
+    #
+    #axs[0].imshow(self.phaseunwrapped_numpy, cmap='gray')
+    #axs[1].imshow(self.meiji, cmap='hsv')
+    #axs[1].axis('off')
+    #axs[2].imshow(self.mask_borderless,zorder=1, cmap='gray')
+    #axs[2].scatter(self.x1,self.y1,zorder=2, s=1)
+    #axs[2].axis('off')
+    #plt.savefig('mygraph.png')
+    #
     return True
 
 class NeedleSegmenterTest(ScriptedLoadableModuleTest):
