@@ -349,6 +349,7 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
 
     sitk_magn = sitkUtils.PullVolumeFromSlicer(magnitudevolume)
     sitk_phase = sitkUtils.PullVolumeFromSlicer(phasevolume)
+
     numpy_magn = sitk.GetArrayFromImage(sitk_magn)
     numpy_phase = sitk.GetArrayFromImage(sitk_phase)
     
@@ -363,63 +364,62 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
     #mask = mask[slice,:,:]
     numpy_magn_sliced = numpy_magn.astype(np.uint8)
 
-    #mask thresholding 
-    img = cv2.pyrDown(numpy_magn_sliced)
-    _, threshed = cv2.threshold(numpy_magn_sliced, maskThreshold, 255, cv2.THRESH_BINARY)
-    contours,_ = cv2.findContours(threshed, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    # Generate a mask
+    sitk_mask = None
 
-    #find maximum contour and draw   
-    cmax = max(contours, key = cv2.contourArea) 
-    epsilon = 0.002 * cv2.arcLength(cmax, True)
-    approx = cv2.approxPolyDP(cmax, epsilon, True)
-    cv2.drawContours(numpy_magn_sliced, [approx], -1, (0, 255, 0), 3)
+    if 0: # Approach 1: use a simple threshold
+      
+      #mask thresholding
+      sitk_mask = sitk_magn < maskThreshold
+      #sitk_phase_cropped = sitk_phase*sitk.Cast(sitk_magn_mask, sitk_phase.GetPixelID())
+      self.pushSitkToSlicer(sitk_mask, 'threshold_mask')
+      
+    else: # Appraoch 2: Use OpenCV's findCountours
+      
+      img = cv2.pyrDown(numpy_magn_sliced)
+      _, threshed = cv2.threshold(numpy_magn_sliced, maskThreshold, 255, cv2.THRESH_BINARY)
+      contours,_ = cv2.findContours(threshed, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+      
+      #find maximum contour and draw   
+      cmax = max(contours, key = cv2.contourArea) 
+      epsilon = 0.002 * cv2.arcLength(cmax, True)
+      approx = cv2.approxPolyDP(cmax, epsilon, True)
+      cv2.drawContours(numpy_magn_sliced, [approx], -1, (0, 255, 0), 3)
+      
+      width, height = numpy_magn_sliced.shape
+      
+      #fill maximum contour and draw   
+      mask = np.zeros( [width, height, 3],dtype=np.uint8 )
+      cv2.fillPoly(mask, pts =[cmax], color=(255,255,255))
+      mask = mask[:,:,0]
+      mask2 = mask.reshape(1,mask.shape[0],mask.shape[1])
+      sitk_mask = sitk.GetImageFromArray(mask2)
+      sitk_mask = (sitk_mask != 255)
+      sitk_mask.SetOrigin(sitk_phase.GetOrigin())
+      sitk_mask.SetSpacing(sitk_phase.GetSpacing())
+      sitk_mask.SetDirection(sitk_phase.GetDirection())
+      self.pushSitkToSlicer(sitk_mask, 'cv_mask')
 
-    width, height = numpy_magn_sliced.shape
-
-    #fill maximum contour and draw   
-    mask = np.zeros( [width, height, 3],dtype=np.uint8 )
-    cv2.fillPoly(mask, pts =[cmax], color=(255,255,255))
-    mask = mask[:,:,0]
-
-    #phase_cropped
-    phase_cropped = cv2.bitwise_and(numpy_phase, numpy_phase, mask=mask)
-    phase_cropped =  np.expand_dims(phase_cropped, axis=0)
-
-    sitk_phase_cropped = sitk.GetImageFromArray(phase_cropped)
-    sitk_phase_cropped.SetOrigin(sitk_magn.GetOrigin())
-    sitk_phase_cropped.SetSpacing(sitk_magn.GetSpacing())
-    sitk_phase_cropped.SetDirection(sitk_magn.GetDirection())
-
-    #node_phase_cropped = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLScalarVolumeNode')
-    #node_phase_cropped.SetName('phase_cropped')
-    #sitkUtils.PushVolumeToSlicer(sitk_phase_cropped, 'phase_cropped', 0, True)
-    self.pushSitkToSlicer(sitk_phase_cropped, 'phase_cropped')
-
-    #unwrapping
-    phaseCroppedNode = slicer.util.getFirstNodeByName('phase_cropped')
-    phaseCropped = sitk.Cast(sitkUtils.PullVolumeFromSlicer(phaseCroppedNode), sitk.sitkFloat64)
-    #phaseCropped = sitk.Cast(sitk_phase_cropped, sitk.sitkFloat64)
-    
-    pcImageData = phaseCroppedNode.GetImageData()
+    pvImageData = phasevolume.GetImageData()
     scalarType = ''
-    if pcImageData != None:
-      scalarType = pcImageData.GetScalarTypeAsString()
+    if pvImageData != None:
+      scalarType = pvImageData.GetScalarTypeAsString()
 
     # Scale to radian
     if scalarType == 'unsigned short':
-      print('pcImageData*numpy.pi/2048.0 - numpy.pi')
-      phaseCropped = phaseCropped*np.pi/2048.0 - np.pi
+      print('pvImageData*numpy.pi/2048.0 - numpy.pi')
+      sitk_phase = sitk_phase*np.pi/2048.0 - np.pi
     else:
-      print('pcImageData*numpy.pi/4096.0')
-      phaseCropped = phaseCropped*np.pi/4096.0
+      print('pvImageData*numpy.pi/4096.0')
+      sitk_phase = sitk_phase*np.pi/4096.0
+
+    self.pushSitkToSlicer(sitk_phase, 'phase')
+    sitk_phase_cropped = self.unwrap(sitk_phase, mask=sitk_mask)
+    #sitk_phase_cropped = sitk_phase_cropped*sitk.Cast(sitk_mask, sitk_phase.GetPixelID())
     
-    phaseCroppedUnwrapped  = self.unwrap(phaseCropped)
-    #node_phase_cropped_unwrapped = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLScalarVolumeNode')
-    #node_phase_cropped_unwrapped.SetName('phase_cropped_unwrapped')
-    #sitkUtils.PushVolumeToSlicer(phaseCroppedUnwrapped, 'phase_cropped_unwrapped', 0, True)
-    self.pushSitkToSlicer(phaseCroppedUnwrapped, 'phase_cropped_unwrapped')
+    self.pushSitkToSlicer(sitk_phase_cropped, 'phase_cropped_')
     
-    phaseunwrapped = sitk.GetArrayFromImage(phaseCroppedUnwrapped)
+    phaseunwrapped = sitk.GetArrayFromImage(sitk_phase_cropped)
 
     I = phaseunwrapped.squeeze()
     A = np.fft.fft2(I)
@@ -457,7 +457,7 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
     kernel = np.ones((5, 5), np.uint8)
     mask_borderless = cv2.erode(mask_borderless, kernel, iterations=5)
     mask_borderless = ndimage.binary_fill_holes(mask_borderless).astype(np.uint8)
-    x, y = mask_borderless.shape
+    (x, y) = mask_borderless.shape
     mask_borderless = mask_borderless[0 + border_size:y - border_size, 0 + border_size:x - border_size]
 
     B2 = cv2.bitwise_and(B2, B2, mask=mask_borderless)
@@ -498,6 +498,14 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
     maxima_ridges, minima_ridges = hessian_matrix_eigvals(H_elems)
 
     hessian_det = maxima_ridges + minima_ridges
+    
+    hessian_det2 = hessian_det.reshape((1, numpy_magn.shape[0],numpy_magn.shape[1]))
+    sitk_hessian_det2 = sitk.GetImageFromArray(hessian_det2)
+    sitk_hessian_det2.SetOrigin(sitk_magn.GetOrigin())
+    sitk_hessian_det2.SetSpacing(sitk_magn.GetSpacing())
+    sitk_hessian_det2.SetDirection(sitk_magn.GetDirection())
+    self.pushSitkToSlicer(sitk_hessian_det2, 'sitk_hessian_det2')
+    
     coordinate= peak_local_max(maxima_ridges,num_peaks=1, min_distance=20,exclude_border=True, indices=True) 
     x2 = np.asscalar(coordinate[:,1])
     y2= np.asscalar(coordinate[:,0])
@@ -540,8 +548,12 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
     return True
 
   
-  def unwrap(self, imagePhase):
+  def unwrap(self, imagePhase, mask=None):
     imagePhaseNP = sitk.GetArrayFromImage(imagePhase)
+    if mask:
+      maskNP = sitk.GetArrayFromImage(mask)
+      imagePhaseNP = np.ma.array(imagePhaseNP, mask=maskNP)
+    
     imageUnwrappedNP = unwrap_phase(imagePhaseNP)
     imageUnwrapped = sitk.GetImageFromArray(imageUnwrappedNP)
     imageUnwrapped.SetOrigin(imagePhase.GetOrigin())
