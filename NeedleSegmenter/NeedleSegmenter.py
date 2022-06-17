@@ -359,15 +359,16 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
 
     #2D Slice Selector
     ### 3 3D values are : numpy_magn , numpy_phase, mask
-    numpy_magn = numpy_magn[slice_index,:,:]
-    numpy_phase = numpy_phase[slice_index,:,:]
+    numpy_magn_slice = numpy_magn[slice_index,:,:]
+    numpy_phase_slice = numpy_phase[slice_index,:,:]
     #mask = mask[slice,:,:]
-    numpy_magn_sliced = numpy_magn.astype(np.uint8)
+    numpy_magn_sliced = numpy_magn_slice.astype(np.uint8)
 
     # Generate a mask
     sitk_mask = None
 
-    if 0: # Approach 1: use a simple threshold
+    mask = np.array([])
+    if 1: # Approach 1: use a simple threshold
       
       #mask thresholding
       sitk_mask = sitk_magn < maskThreshold
@@ -414,99 +415,182 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
       sitk_phase = sitk_phase*np.pi/4096.0
 
     self.pushSitkToSlicer(sitk_phase, 'phase')
+
+    print('size sitk_phase')
+    print(sitk_phase.GetSize())
+    print('size sitk_mask')
+    print(sitk_mask.GetSize())
+    
     sitk_phase_cropped = self.unwrap(sitk_phase, mask=sitk_mask)
     #sitk_phase_cropped = sitk_phase_cropped*sitk.Cast(sitk_mask, sitk_phase.GetPixelID())
     
     self.pushSitkToSlicer(sitk_phase_cropped, 'phase_cropped_')
     
     phaseunwrapped = sitk.GetArrayFromImage(sitk_phase_cropped)
+    print('size sitk_phase_cropped')
+    print(sitk_phase_cropped.GetSize())
+    print('phaseunwrapped')
+    print(phaseunwrapped.shape)
 
-    I = phaseunwrapped.squeeze()
-    A = np.fft.fft2(I)
-    A1 = np.fft.fftshift(A)
+    if phaseunwrapped.shape[0] == 1: # Process in 2D
+      I = phaseunwrapped.squeeze()
+      A = np.fft.fft2(I)
+      A1 = np.fft.fftshift(A)
+      
+      # Image size
+      [M, N] = A.shape
+      
+      # filter size parameter
+      R = 5
+      
+      X = np.arange(0, N, 1)
+      Y = np.arange(0, M, 1)
+      
+      [X, Y] = np.meshgrid(X, Y)
+      Cx = 0.5 * N
+      Cy = 0.5 * M
+      Lo = np.exp(-(((X - Cx) ** 2) + ((Y - Cy) ** 2)) / ((2 * R) ** 2))
+      Hi = 1 - Lo
+      
+      J = A1 * Lo
+      J1 = np.fft.ifftshift(J)
+      B1 = np.fft.ifft2(J1)
+      
+      K = A1 * Hi
+      K1 = np.fft.ifftshift(K)
+      B2 = np.fft.ifft2(K1)
+      B2 = np.real(B2)
+      
+      #Remove border  for false positive
+      #sitk_mask = sitk_mask[:,:,0] * 255
+      numpy_mask = sitk.GetArrayFromImage(sitk_mask)
+      if mask.shape[0] == 0:
+        mask = numpy_mask[0,:,:]
+        print('mask shape')
+        print(mask.shape)
+        mask = (1-mask)
 
-    # Image size
-    [M, N] = A.shape
+      mask_= mask.reshape(numpy_mask.shape)
+      mask_reshaped = sitk.GetImageFromArray(mask_)
+      mask_reshaped.SetOrigin(sitk_mask.GetOrigin())
+      mask_reshaped.SetSpacing(sitk_mask.GetSpacing())
+      mask_reshaped.SetDirection(sitk_mask.GetDirection())
+      self.pushSitkToSlicer(mask_reshaped, 'mask__')
+        
+      border_size = 20
+      top, bottom, left, right = [border_size] * 4
+      mask_borderless = cv2.copyMakeBorder(mask, top, bottom, left, right, cv2.BORDER_CONSTANT, (0, 0, 0))
+      
+      kernel = np.ones((5, 5), np.uint8)
+      mask_borderless = cv2.erode(mask_borderless, kernel, iterations=5)
+      mask_borderless = ndimage.binary_fill_holes(mask_borderless).astype(np.uint8)
+      (x, y) = mask_borderless.shape
+      mask_borderless = mask_borderless[0 + border_size:y - border_size, 0 + border_size:x - border_size]
 
-    # filter size parameter
-    R = 5
+      print(mask_borderless.shape)
+      numpy_mask_borderless= mask_borderless.reshape(numpy_mask.shape)
+      numpy_mask_borderless_reshaped = sitk.GetImageFromArray(numpy_mask_borderless)
+      numpy_mask_borderless_reshaped.SetOrigin(sitk_mask.GetOrigin())
+      numpy_mask_borderless_reshaped.SetSpacing(sitk_mask.GetSpacing())
+      numpy_mask_borderless_reshaped.SetDirection(sitk_mask.GetDirection())
+      self.pushSitkToSlicer(numpy_mask_borderless_reshaped, 'numpy_mask_borderless')
+      
+      print('B2.shape')
+      print(B2.shape)
+      
+      B2 = cv2.bitwise_and(B2, B2, mask=mask_borderless)
 
-    X = np.arange(0, N, 1)
-    Y = np.arange(0, M, 1)
+    else: # Process in 3D
+      I = phaseunwrapped
+      A = np.fft.fftn(I)
+      A1 = np.fft.fftshift(A)
+      
+      # Image size
+      [Nx, Ny, Nz] = A.shape
+      
+      # filter size parameter
+      R = 5
+      
+      X_ = np.linspace(0., 1., Nx)
+      Y_ = np.linspace(0., 1., Ny)
+      Z_ = np.linspace(0., 1., Nz)
+      
+      [X, Y, Z] = np.meshgrid(X_, Y_, Z_, indexing='ij')
+      Cx = 0.5 * Nx
+      Cy = 0.5 * Ny
+      Cz = 0.5 * Nz
+      Lo = np.exp(-(((X - Cx) ** 2) + ((Y - Cy) ** 2) + ((Z - Cz) ** 2)) / ((2 * R) ** 2))
+      Hi = 1 - Lo
 
-    [X, Y] = np.meshgrid(X, Y)
-    Cx = 0.5 * N
-    Cy = 0.5 * M
-    Lo = np.exp(-(((X - Cx) ** 2) + ((Y - Cy) ** 2)) / ((2 * R) ** 2))
-    Hi = 1 - Lo
+      print(X.shape)
+      print(Y.shape)
+      print(Z.shape)
+      print(A1.shape)
+      
+      J = A1 * Lo
+      J1 = np.fft.ifftshift(J)
+      B1 = np.fft.ifftn(J1)
+      
+      K = A1 * Hi
+      K1 = np.fft.ifftshift(K)
+      B2 = np.fft.ifftn(K1)
+      B2 = np.real(B2)
+      
+      ##Remove border  for false positive
+      mask = sitk.GetArrayFromImage(sitk_mask)
+      print('mask size')
+      print(mask.shape)
+      
+      for i in range(mask.shape[0]):
+        mask_slice = 1-mask[i,:,:]
+        border_size = 20
+        top, bottom, left, right = [border_size] * 4
+        mask_borderless = cv2.copyMakeBorder(mask_slice, top, bottom, left, right, cv2.BORDER_CONSTANT, (0, 0, 0))
+        
+        kernel = np.ones((5, 5), np.uint8)
+        mask_borderless = cv2.erode(mask_borderless, kernel, iterations=5)
+        mask_borderless = ndimage.binary_fill_holes(mask_borderless).astype(np.uint8)
+        (x, y) = mask_borderless.shape
+        mask_borderless = mask_borderless[0 + border_size:y - border_size, 0 + border_size:x - border_size]
+        
+        B2[i,:,:] = cv2.bitwise_and(B2[i,:,:], B2[i,:,:], mask=mask_borderless)
 
-    J = A1 * Lo
-    J1 = np.fft.ifftshift(J)
-    B1 = np.fft.ifft2(J1)
+    #H_elems = hessian_matrix(B2, sigma=5, order='rc')
+    H_elems = hessian_matrix(B2, sigma=2, order='rc')
+    ridges = hessian_matrix_eigvals(H_elems)
+    #maxima_ridges, minima_ridges = hessian_matrix_eigvals(H_elems)
+    hessian_det = np.sum(ridges, axis=0)
+    #hessian_det2 = hessian_det.reshape((1, numpy_magn.shape[0],numpy_magn.shape[1]))
+    print('hessian det')
+    print(hessian_det.shape)
 
-    K = A1 * Hi
-    K1 = np.fft.ifftshift(K)
-    B2 = np.fft.ifft2(K1)
-    B2 = np.real(B2)
-
-    #Remove border  for false positive
-    border_size = 20
-    top, bottom, left, right = [border_size] * 4
-    mask_borderless = cv2.copyMakeBorder(mask, top, bottom, left, right, cv2.BORDER_CONSTANT, (0, 0, 0))
+    b2_reshaped = B2.reshape(numpy_phase.shape)
+    sitk_b2_reshaped = sitk.GetImageFromArray(b2_reshaped)
+    sitk_b2_reshaped.SetOrigin(sitk_mask.GetOrigin())
+    sitk_b2_reshaped.SetSpacing(sitk_mask.GetSpacing())
+    sitk_b2_reshaped.SetDirection(sitk_mask.GetDirection())
+    self.pushSitkToSlicer(sitk_b2_reshaped, 'sitk_b2')
     
-    kernel = np.ones((5, 5), np.uint8)
-    mask_borderless = cv2.erode(mask_borderless, kernel, iterations=5)
-    mask_borderless = ndimage.binary_fill_holes(mask_borderless).astype(np.uint8)
-    (x, y) = mask_borderless.shape
-    mask_borderless = mask_borderless[0 + border_size:y - border_size, 0 + border_size:x - border_size]
 
-    B2 = cv2.bitwise_and(B2, B2, mask=mask_borderless)
-    
-#<<<<<<< HEAD
-#
-#    # for debug
-#    self.mask_borderless = mask_borderless
-#
-#    # Sato tubeness filter
-#    # ridgeOperator = int(ridgeOperator)
-#    meiji = sato(B2, sigmas=(ridgeOperator, ridgeOperator), black_ridges=True)
-#
-#    #(minVal, maxVal, minLoc, maxLoc) = cv2.minMaxLoc(meiji)
-#
-#    result2 = np.reshape(meiji, meiji.shape[0]*meiji.shape[1])
-#
-#    meiji2 = meiji.reshape(phaseunwrapped.shape)
-#    sitk_meiji2 = sitk.GetImageFromArray(meiji2)
-#    sitk_meiji2.SetOrigin(sitk_magn.GetOrigin())
-#    sitk_meiji2.SetSpacing(sitk_magn.GetSpacing())
-#    sitk_meiji2.SetDirection(sitk_magn.GetDirection())
-#    self.pushSitkToSlicer(sitk_meiji2, 'meiji')
-#    
-#    ids = np.argpartition(result2, -51)[-51:]
-#    sort = ids[np.argsort(result2[ids])[::-1]]
-#    
-#    (y1,x1) = np.unravel_index(sort[0], meiji.shape) # best match
-#
-#    self.meiji = meiji
-#
-#    point = (x1,y1)
-#    coords = [x1,y1,slice_index]
-#    #circle1 = plt.Circle(point,2,color='red')
-#=======
-             
-    H_elems = hessian_matrix(B2, sigma=5, order='rc')
-    maxima_ridges, minima_ridges = hessian_matrix_eigvals(H_elems)
+    hessian_det_reshaped = hessian_det.reshape(numpy_phase.shape)
+    sitk_hessian_det = sitk.GetImageFromArray(hessian_det_reshaped)
+    sitk_hessian_det.SetOrigin(sitk_mask.GetOrigin())
+    sitk_hessian_det.SetSpacing(sitk_mask.GetSpacing())
+    sitk_hessian_det.SetDirection(sitk_mask.GetDirection())
+    self.pushSitkToSlicer(sitk_hessian_det, 'sitk_hessian_det2')
+    self.pushSitkToSlicer(sitk_mask, 'sitk_mask')
 
-    hessian_det = maxima_ridges + minima_ridges
-    
-    hessian_det2 = hessian_det.reshape((1, numpy_magn.shape[0],numpy_magn.shape[1]))
-    sitk_hessian_det2 = sitk.GetImageFromArray(hessian_det2)
-    sitk_hessian_det2.SetOrigin(sitk_magn.GetOrigin())
-    sitk_hessian_det2.SetSpacing(sitk_magn.GetSpacing())
-    sitk_hessian_det2.SetDirection(sitk_magn.GetDirection())
-    self.pushSitkToSlicer(sitk_hessian_det2, 'sitk_hessian_det2')
-    
-    coordinate= peak_local_max(maxima_ridges,num_peaks=1, min_distance=20,exclude_border=True, indices=True) 
+    ridge0 = ridges[0]
+    ridge0_reshaped = ridge0.reshape(numpy_phase.shape)
+    sitk_ridge0 = sitk.GetImageFromArray(ridge0_reshaped)
+    sitk_ridge0.SetOrigin(sitk_mask.GetOrigin())
+    sitk_ridge0.SetSpacing(sitk_mask.GetSpacing())
+    sitk_ridge0.SetDirection(sitk_mask.GetDirection())
+    self.pushSitkToSlicer(sitk_ridge0, 'sitk_ridge0')
+
+    #coordinate= peak_local_max(maxima_ridges,num_peaks=1, min_distance=20,exclude_border=True, indices=True)
+    coordinate= peak_local_max(ridges[0],num_peaks=1, min_distance=20,exclude_border=True, indices=True)
+    print(coordinate)
     x2 = np.asscalar(coordinate[:,1])
     y2= np.asscalar(coordinate[:,0])
     point = (x2,y2)
