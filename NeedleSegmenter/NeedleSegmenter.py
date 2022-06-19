@@ -12,7 +12,6 @@ from skimage.feature import hessian_matrix, hessian_matrix_eigvals
 from skimage.feature import peak_local_max
 import cv2
 import tempfile
-#import matplotlib.pyplot as plt
 from skimage.restoration import unwrap_phase
 import SimpleITK as sitk
 import sitkUtils
@@ -177,6 +176,14 @@ class NeedleSegmenterWidget(ScriptedLoadableModuleWidget):
     
     # Layout within the collapsible button
     advancedFormLayout = qt.QFormLayout(advancedCollapsibleButton)
+
+    #
+    # check box to output images at intermediate steps
+    #
+    self.debugFlagCheckBox = qt.QCheckBox()
+    self.debugFlagCheckBox.checked = 0
+    self.debugFlagCheckBox.setToolTip("If checked, output images at intermediate steps.")
+    advancedFormLayout.addRow("Debug", self.debugFlagCheckBox)
     
     #
     # 2D slice value
@@ -295,7 +302,10 @@ class NeedleSegmenterWidget(ScriptedLoadableModuleWidget):
     viewSelecter = self.getViewSelecter()
     maskThreshold = self.maskThresholdWidget.value
     ridgeOperator = self.ridgeOperatorWidget.value
-    logic.needlefinder(self.magnitudevolume.currentNode(), self.phasevolume.currentNode(), maskThreshold, ridgeOperator, viewSelecter)
+
+    debug_flag = self.debugFlagCheckBox.checked
+        
+    logic.needlefinder(self.magnitudevolume.currentNode(), self.phasevolume.currentNode(), maskThreshold, ridgeOperator, viewSelecter, debug_flag)
 
   def onRealTimeTracking(self):
     self.counter = 0
@@ -304,7 +314,10 @@ class NeedleSegmenterWidget(ScriptedLoadableModuleWidget):
     viewSelecter = self.getViewSelecter()
     maskThreshold = self.maskThresholdWidget.value
     ridgeOperator = self.ridgeOperatorWidget.value
-    logic.realtime(self.magnitudevolume.currentNode(), self.phasevolume.currentNode(), maskThreshold, ridgeOperator, viewSelecter, self.counter, self.lastMatrix)
+
+    debug_flag = self.debugFlagCheckBox.checked
+    
+    logic.realtime(self.magnitudevolume.currentNode(), self.phasevolume.currentNode(), maskThreshold, ridgeOperator, viewSelecter, self.counter, self.lastMatrix, debug_flag)
 
   def SRCRealTimeTracking(self):
   #set observer node so that i can the image as it updates
@@ -313,14 +326,20 @@ class NeedleSegmenterWidget(ScriptedLoadableModuleWidget):
     viewSelecter = self.getViewSelecter()      
     maskThreshold = self.maskThresholdWidget.value
     ridgeOperator = self.ridgeOperatorWidget.value
-    logic.SRCrealtime(self.magnitudevolume.currentNode(), self.phasevolume.currentNode(), maskThreshold, ridgeOperator, viewSelecter, self.counter)
+
+    debug_flag = self.debugFlagCheckBox.checked
+        
+    logic.SRCrealtime(self.magnitudevolume.currentNode(), self.phasevolume.currentNode(), maskThreshold, ridgeOperator, viewSelecter, self.counter, debug_flag)
 
   def onApplyButton(self):
     logic = NeedleSegmenterLogic()
     imageSlice = self.imageSliceSliderWidget.value
     maskThreshold = self.maskThresholdWidget.value
     ridgeOperator = self.ridgeOperatorWidget.value
-    logic.run(self.magnitudevolume.currentNode(), self.phasevolume.currentNode(), imageSlice, maskThreshold, ridgeOperator)
+    
+    debug_flag = self.debugFlagCheckBox.checked
+
+    logic.run(self.magnitudevolume.currentNode(), self.phasevolume.currentNode(), imageSlice, maskThreshold, ridgeOperator, debug_flag)
 
     
 class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
@@ -342,7 +361,7 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
       return False
     return True
 
-  def detectNeedle(self, magnitudevolume, phasevolume, maskThreshold, ridgeOperator, slice_index):
+  def detectNeedle(self, magnitudevolume, phasevolume, maskThreshold, ridgeOperator, slice_index, debug_flag=False):
 
     magn_matrix = vtk.vtkMatrix4x4()
     magnitudevolume.GetIJKToRASMatrix(magn_matrix)
@@ -353,10 +372,6 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
     numpy_magn = sitk.GetArrayFromImage(sitk_magn)
     numpy_phase = sitk.GetArrayFromImage(sitk_phase)
     
-    # slice = int(slice_number)  
-    # slice = (slice_index)
-    # maskThreshold = int(maskThreshold)
-
     #2D Slice Selector
     ### 3 3D values are : numpy_magn , numpy_phase, mask
     numpy_magn_slice = numpy_magn[slice_index,:,:]
@@ -368,14 +383,18 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
     sitk_mask = None
 
     mask = np.array([])
-    if 1: # Approach 1: use a simple threshold
+    if 1:
+      # Approach 1: use a simple threshold
       
       #mask thresholding
       sitk_mask = sitk_magn < maskThreshold
       #sitk_phase_cropped = sitk_phase*sitk.Cast(sitk_magn_mask, sitk_phase.GetPixelID())
-      self.pushSitkToSlicer(sitk_mask, 'threshold_mask')
+      if debug_flag:
+        self.pushSitkToSlicer(sitk_mask, 'debug_threshold_mask')
       
-    else: # Appraoch 2: Use OpenCV's findCountours
+    else:
+      # Appraoch 2: Use OpenCV's findCountours
+      # NOTE: This does not working for a 3D image.
       
       img = cv2.pyrDown(numpy_magn_sliced)
       _, threshed = cv2.threshold(numpy_magn_sliced, maskThreshold, 255, cv2.THRESH_BINARY)
@@ -414,24 +433,25 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
       print('pvImageData*numpy.pi/4096.0')
       sitk_phase = sitk_phase*np.pi/4096.0
 
-    self.pushSitkToSlicer(sitk_phase, 'phase')
-
-    print('size sitk_phase')
-    print(sitk_phase.GetSize())
-    print('size sitk_mask')
-    print(sitk_mask.GetSize())
+    if debug_flag:
+      self.pushSitkToSlicer(sitk_phase, 'debug_phase')
+      print('size sitk_phase')
+      print(sitk_phase.GetSize())
+      print('size sitk_mask')
+      print(sitk_mask.GetSize())
     
     sitk_phase_cropped = self.unwrap(sitk_phase, mask=sitk_mask)
+    phaseunwrapped = sitk.GetArrayFromImage(sitk_phase_cropped)
+    
     #sitk_phase_cropped = self.unwrap(sitk_phase)
     #sitk_phase_cropped = sitk_phase_cropped*sitk.Cast(sitk_mask, sitk_phase.GetPixelID())
-    
-    self.pushSitkToSlicer(sitk_phase_cropped, 'phase_cropped_')
-    
-    phaseunwrapped = sitk.GetArrayFromImage(sitk_phase_cropped)
-    print('size sitk_phase_cropped')
-    print(sitk_phase_cropped.GetSize())
-    print('phaseunwrapped')
-    print(phaseunwrapped.shape)
+
+    if debug_flag:
+      self.pushSitkToSlicer(sitk_phase_cropped, 'phase_cropped_')
+      print('size sitk_phase_cropped')
+      print(sitk_phase_cropped.GetSize())
+      print('phaseunwrapped')
+      print(phaseunwrapped.shape)
 
     if phaseunwrapped.shape[0] == 1: # Process in 2D
       I = phaseunwrapped.squeeze()
@@ -467,16 +487,20 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
       numpy_mask = sitk.GetArrayFromImage(sitk_mask)
       if mask.shape[0] == 0:
         mask = numpy_mask[0,:,:]
-        print('mask shape')
-        print(mask.shape)
         mask = (1-mask)
+        if debug_flag:
+          print('mask shape')
+          print(mask.shape)
 
+        
       mask_= mask.reshape(numpy_mask.shape)
       mask_reshaped = sitk.GetImageFromArray(mask_)
       mask_reshaped.SetOrigin(sitk_mask.GetOrigin())
       mask_reshaped.SetSpacing(sitk_mask.GetSpacing())
       mask_reshaped.SetDirection(sitk_mask.GetDirection())
-      self.pushSitkToSlicer(mask_reshaped, 'mask__')
+
+      if debug_flag:
+        self.pushSitkToSlicer(mask_reshaped, 'debug_mask')
         
       border_size = 20
       top, bottom, left, right = [border_size] * 4
@@ -489,16 +513,19 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
       #mask_borderless = mask_borderless[0 + border_size:y - border_size, 0 + border_size:x - border_size]
       mask_borderless = mask_borderless[0 + border_size:x - border_size, 0 + border_size:y - border_size]
 
-      print(mask_borderless.shape)
       numpy_mask_borderless= mask_borderless.reshape(numpy_mask.shape)
       numpy_mask_borderless_reshaped = sitk.GetImageFromArray(numpy_mask_borderless)
       numpy_mask_borderless_reshaped.SetOrigin(sitk_mask.GetOrigin())
       numpy_mask_borderless_reshaped.SetSpacing(sitk_mask.GetSpacing())
       numpy_mask_borderless_reshaped.SetDirection(sitk_mask.GetDirection())
-      self.pushSitkToSlicer(numpy_mask_borderless_reshaped, 'numpy_mask_borderless')
       
-      print('B2.shape')
-      print(B2.shape)
+      if debug_flag:
+        print('mask_borderless')
+        print(mask_borderless.shape)
+        self.pushSitkToSlicer(numpy_mask_borderless_reshaped, 'debug_numpy_mask_borderless')
+      
+        print('B2.shape')
+        print(B2.shape)
       
       B2 = cv2.bitwise_and(B2, B2, mask=mask_borderless)
 
@@ -523,11 +550,12 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
       Cz = 0.5 * Nz
       Lo = np.exp(-(((X - Cx) ** 2) + ((Y - Cy) ** 2) + ((Z - Cz) ** 2)) / ((2 * R) ** 2))
       Hi = 1 - Lo
-
-      print(X.shape)
-      print(Y.shape)
-      print(Z.shape)
-      print(A1.shape)
+      
+      if debug_flag:
+        print(X.shape)
+        print(Y.shape)
+        print(Z.shape)
+        print(A1.shape)
       
       J = A1 * Lo
       J1 = np.fft.ifftshift(J)
@@ -540,8 +568,9 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
       
       ##Remove border  for false positive
       mask = sitk.GetArrayFromImage(sitk_mask)
-      print('mask size')
-      print(mask.shape)
+      if debug_flag:
+        print('mask size')
+        print(mask.shape)
       
       for i in range(mask.shape[0]):
         numpy_mask = sitk.GetArrayFromImage(sitk_mask)
@@ -561,9 +590,10 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
         (x, y) = mask_borderless.shape
         mask_borderless = mask_borderless[0 + border_size:x - border_size,0 + border_size:y - border_size]
 
-        print('mask size 2')
-        print(mask_borderless.shape)
-        print(B2[i,:,:].shape)
+        if debug_flag:
+          print('mask size 2')
+          print(mask_borderless.shape)
+          print(B2[i,:,:].shape)
         
         B2[i,:,:] = cv2.bitwise_and(B2[i,:,:], B2[i,:,:], mask=mask_borderless)
 
@@ -573,15 +603,17 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
     #maxima_ridges, minima_ridges = hessian_matrix_eigvals(H_elems)
     hessian_det = np.sum(ridges, axis=0)
     #hessian_det2 = hessian_det.reshape((1, numpy_magn.shape[0],numpy_magn.shape[1]))
-    print('hessian det')
-    print(hessian_det.shape)
+    if debug_flag:
+      print('hessian det')
+      print(hessian_det.shape)
 
     b2_reshaped = B2.reshape(numpy_phase.shape)
     sitk_b2_reshaped = sitk.GetImageFromArray(b2_reshaped)
     sitk_b2_reshaped.SetOrigin(sitk_mask.GetOrigin())
     sitk_b2_reshaped.SetSpacing(sitk_mask.GetSpacing())
     sitk_b2_reshaped.SetDirection(sitk_mask.GetDirection())
-    self.pushSitkToSlicer(sitk_b2_reshaped, 'sitk_b2')
+    if debug_flag:
+      self.pushSitkToSlicer(sitk_b2_reshaped, 'debug_sitk_b2')
     
 
     hessian_det_reshaped = hessian_det.reshape(numpy_phase.shape)
@@ -589,8 +621,9 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
     sitk_hessian_det.SetOrigin(sitk_mask.GetOrigin())
     sitk_hessian_det.SetSpacing(sitk_mask.GetSpacing())
     sitk_hessian_det.SetDirection(sitk_mask.GetDirection())
-    self.pushSitkToSlicer(sitk_hessian_det, 'sitk_hessian_det2')
-    self.pushSitkToSlicer(sitk_mask, 'sitk_mask')
+    if debug_flag:
+      self.pushSitkToSlicer(sitk_hessian_det, 'debug_sitk_hessian_det2')
+      self.pushSitkToSlicer(sitk_mask, 'debug_sitk_mask')
 
     ridge0 = ridges[0]
     ridge0_reshaped = ridge0.reshape(numpy_phase.shape)
@@ -598,41 +631,30 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
     sitk_ridge0.SetOrigin(sitk_mask.GetOrigin())
     sitk_ridge0.SetSpacing(sitk_mask.GetSpacing())
     sitk_ridge0.SetDirection(sitk_mask.GetDirection())
-    self.pushSitkToSlicer(sitk_ridge0, 'sitk_ridge0')
+    if debug_flag:
+      self.pushSitkToSlicer(sitk_ridge0, 'debug_sitk_ridge0')
 
     #coordinate= peak_local_max(maxima_ridges,num_peaks=1, min_distance=20,exclude_border=True, indices=True)
-    coordinate= peak_local_max(ridges[0],num_peaks=1, min_distance=20,exclude_border=True, indices=True)
-    print(coordinate)
-    x2 = np.asscalar(coordinate[:,1])
-    y2= np.asscalar(coordinate[:,0])
-    point = (x2,y2)
-    coords = [x2,y2,slice_index]
-    #circle1 = plt.Circle(point,2,color='red')
-
-    # Find or create MRML transform node
-    transformNode = None
-    try:
-      transformNode = slicer.util.getNode('TipTransform')
-    except slicer.util.MRMLNodeNotFoundException as exc:
-      transformNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLLinearTransformNode')
-      transformNode.SetName("TipTransform")
+    coordinate= peak_local_max(ridges[0],num_peaks=1, min_distance=20,exclude_border=True)
+    if coordinate.shape[0] > 0:
+      x2 = np.asscalar(coordinate[:,1])
+      y2= np.asscalar(coordinate[:,0])
+      point = (x2,y2)
+      #coords = [x2,y2,slice_index]
+      coords_ijk = [x2,y2,slice_index,1.0]
       
-    transformNode.SetAndObserveMatrixTransformToParent(magn_matrix)
-    
-    # Fiducial Creation
-    fidNode1 = None
-    try: 
-      fidNode1 = slicer.util.getNode('needle_tip')
-    except slicer.util.MRMLNodeNotFoundException as exc:
-      fidNode1 = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode", "needle_tip")
+      coords_ras = magn_matrix.MultiplyPoint(coords_ijk)
+      coords_ras = coords_ras[0:3]
 
-    fidNode1.RemoveAllMarkups()
+      # Fiducial Creation
+      fidNode1 = None
+      try: 
+        fidNode1 = slicer.util.getNode('needle_tip')
+      except slicer.util.MRMLNodeNotFoundException as exc:
+        fidNode1 = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode", "needle_tip")
       
-    #  fidNode1.CreateDefaultDisplayNodes()
-    #  fidNode1.SetMaximumNumberOfControlPoints(1) 
-
-    fidNode1.AddFiducialFromArray(coords)
-    fidNode1.SetAndObserveTransformNodeID(transformNode.GetID())
+      fidNode1.RemoveAllMarkups()
+      fidNode1.AddFiducialFromArray(coords_ras)
 
     ###TODO: dont delete the volume after use. create a checkpoint to update on only one volume
     delete_wrapped = slicer.mrmlScene.GetFirstNodeByName('phase_cropped')
@@ -687,12 +709,12 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
     return (slice_index, sliceNode, fov, offset)
   
   
-  def SRCrealtime(self, magnitudevolume , phasevolume, maskThreshold, ridgeOperator,viewSelecter, counter):
+  def SRCrealtime(self, magnitudevolume , phasevolume, maskThreshold, ridgeOperator,viewSelecter, counter, debugFlag):
     
     # (slice_index, sliceNode, fov, offset) = self.findSliceIndex(viewSelecter)
     slice_index = 0   
 
-    self.detectNeedle(magnitudevolume , phasevolume, maskThreshold, ridgeOperator, slice_index)
+    self.detectNeedle(magnitudevolume , phasevolume, maskThreshold, ridgeOperator, slice_index, debugFlag)
 
     ## Setting the Slice view 
     slice_logic = slicer.app.layoutManager().sliceWidget(''+ str(viewSelecter)).sliceLogic()
@@ -704,7 +726,7 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
     #sliceNode.SetSliceOffset(offset)
 
     
-  def realtime(self, magnitudevolume , phasevolume, maskThreshold, ridgeOperator,viewSelecter, counter, lastMatrix):
+  def realtime(self, magnitudevolume , phasevolume, maskThreshold, ridgeOperator,viewSelecter, counter, lastMatrix, debugFlag):
 
     ## Counter is disabled for current use, only updates when slice view changes
     inputransform = slicer.mrmlScene.GetNodeByID('vtkMRMLSliceNode'+ str(viewSelecter)).GetXYToRAS()
@@ -713,7 +735,7 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
       
     if (not self.CompareMatrices(lastMatrix, inputransform) or counter >= 20) :
 
-      self.detectNeedle(magnitudevolume , phasevolume, maskThreshold, ridgeOperator, slice_index)
+      self.detectNeedle(magnitudevolume , phasevolume, maskThreshold, ridgeOperator, slice_index, debugFlag)
      
       ## Setting the Slice view 
       slice_logic = slicer.app.layoutManager().sliceWidget(''+ str(viewSelecter)).sliceLogic()
@@ -740,11 +762,11 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
     return True
 
 
-  def needlefinder(self, magnitudevolume , phasevolume, maskThreshold, ridgeOperator, viewSelecter):
+  def needlefinder(self, magnitudevolume , phasevolume, maskThreshold, ridgeOperator, viewSelecter, debugFlag):
 
     (slice_index, sliceNode, fov, offset) = self.findSliceIndex(viewSelecter)
 
-    self.detectNeedle(magnitudevolume , phasevolume, maskThreshold, ridgeOperator, slice_index)
+    self.detectNeedle(magnitudevolume , phasevolume, maskThreshold, ridgeOperator, slice_index, debugFlag)
 
     ## Setting the Slice view 
     slice_logic = slicer.app.layoutManager().sliceWidget(''+ str(viewSelecter)).sliceLogic()
@@ -761,11 +783,11 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
     #   view_selecter.SetSliceOffset(y_ras)
 
 
-  def run(self, magnitudevolume , phasevolume, imageSlice, maskThreshold, ridgeOperator):
+  def run(self, magnitudevolume , phasevolume, imageSlice, maskThreshold, ridgeOperator, debugFlag):
 
     slice_index = int(imageSlice)
 
-    self.detectNeedle(magnitudevolume , phasevolume, maskThreshold, ridgeOperator, slice_index)
+    self.detectNeedle(magnitudevolume , phasevolume, maskThreshold, ridgeOperator, slice_index, debugFlag)
     
     #fig, axs = plt.subplots(1,3)
     #fig.suptitle('Needle Tracking')
