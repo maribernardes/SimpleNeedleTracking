@@ -422,6 +422,7 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
     print(sitk_mask.GetSize())
     
     sitk_phase_cropped = self.unwrap(sitk_phase, mask=sitk_mask)
+    #sitk_phase_cropped = self.unwrap(sitk_phase)
     #sitk_phase_cropped = sitk_phase_cropped*sitk.Cast(sitk_mask, sitk_phase.GetPixelID())
     
     self.pushSitkToSlicer(sitk_phase_cropped, 'phase_cropped_')
@@ -485,7 +486,8 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
       mask_borderless = cv2.erode(mask_borderless, kernel, iterations=5)
       mask_borderless = ndimage.binary_fill_holes(mask_borderless).astype(np.uint8)
       (x, y) = mask_borderless.shape
-      mask_borderless = mask_borderless[0 + border_size:y - border_size, 0 + border_size:x - border_size]
+      #mask_borderless = mask_borderless[0 + border_size:y - border_size, 0 + border_size:x - border_size]
+      mask_borderless = mask_borderless[0 + border_size:x - border_size, 0 + border_size:y - border_size]
 
       print(mask_borderless.shape)
       numpy_mask_borderless= mask_borderless.reshape(numpy_mask.shape)
@@ -542,7 +544,13 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
       print(mask.shape)
       
       for i in range(mask.shape[0]):
+        numpy_mask = sitk.GetArrayFromImage(sitk_mask)
+        if mask.shape[0] == 0:
+          mask = numpy_mask[i,:,:]
+          mask = (1-mask)
+        
         mask_slice = 1-mask[i,:,:]
+        
         border_size = 20
         top, bottom, left, right = [border_size] * 4
         mask_borderless = cv2.copyMakeBorder(mask_slice, top, bottom, left, right, cv2.BORDER_CONSTANT, (0, 0, 0))
@@ -551,7 +559,11 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
         mask_borderless = cv2.erode(mask_borderless, kernel, iterations=5)
         mask_borderless = ndimage.binary_fill_holes(mask_borderless).astype(np.uint8)
         (x, y) = mask_borderless.shape
-        mask_borderless = mask_borderless[0 + border_size:y - border_size, 0 + border_size:x - border_size]
+        mask_borderless = mask_borderless[0 + border_size:x - border_size,0 + border_size:y - border_size]
+
+        print('mask size 2')
+        print(mask_borderless.shape)
+        print(B2[i,:,:].shape)
         
         B2[i,:,:] = cv2.bitwise_and(B2[i,:,:], B2[i,:,:], mask=mask_borderless)
 
