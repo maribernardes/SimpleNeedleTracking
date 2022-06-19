@@ -5,13 +5,11 @@ from slicer.ScriptedLoadableModule import *
 import logging
 import math
 import numpy as np
-from vtk.util import numpy_support
 from scipy import ndimage
 from skimage.filters import meijering, sato
 from skimage.feature import hessian_matrix, hessian_matrix_eigvals
 from skimage.feature import peak_local_max
 import cv2
-import tempfile
 from skimage.restoration import unwrap_phase
 import SimpleITK as sitk
 import sitkUtils
