@@ -97,39 +97,19 @@ class NeedleSegmenterWidget(ScriptedLoadableModuleWidget):
 
     realtimebutton = qt.QHBoxLayout()    
      
-    #   
-    # Start Real-Time Tracking 
-    #
-    self.trackingButton = qt.QPushButton("Start Simulated Tracking")
-    self.trackingButton.toolTip = "Observe slice from scene viewer"
-    self.trackingButton.enabled = False
-    self.trackingButton.clicked.connect(self.SimStartTimer)
-    realtimebutton.addWidget(self.trackingButton)
-
-    self.SimTimer = qt.QTimer()
-    self.SimTimer.timeout.connect(self.onRealTimeTracking)
-
-    # Stop Real-Time Tracking
-    self.stopsequence = qt.QPushButton('Stop Simulated Tracking')
-    self.stopsequence.clicked.connect(self.SimStopTimer)
-    realtimebutton.addWidget(self.stopsequence)
-     
-    parametersFormLayout.addRow("", realtimebutton)
-
-
     # Add vertical spacer
-    self.layout.addStretch(1)
+    #self.layout.addStretch(0)
 
     ####################################
     ##                                ##
-    ## Scanner Remote Control Protocol##
+    ## Live Tracking                  ##
     ##                                ##
     ####################################
 
-    SRCcollapsibleButton = ctk.ctkCollapsibleButton()
-    SRCcollapsibleButton.text =  "Scanner Remote Control Protocol"
-    self.layout.addWidget(SRCcollapsibleButton)
-    SRCFormLayout = qt.QFormLayout(SRCcollapsibleButton)
+    RTcollapsibleButton = ctk.ctkCollapsibleButton()
+    RTcollapsibleButton.text =  "Live Tracking"
+    self.layout.addWidget(RTcollapsibleButton)
+    RTFormLayout = qt.QFormLayout(RTcollapsibleButton)
     
     realtimebutton = qt.QHBoxLayout()    
 
@@ -141,29 +121,29 @@ class NeedleSegmenterWidget(ScriptedLoadableModuleWidget):
     self.fpsBox.setMinimum(0.1)
     self.fpsBox.setSuffix(" FPS")
     self.fpsBox.value = 0.5
-    SRCFormLayout.addRow("Update Rate:", self.fpsBox)
+    RTFormLayout.addRow("Update Rate:", self.fpsBox)
 
 
-    # Start SRC Real-Time Tracking 
-    self.SRCtrackingButton = qt.QPushButton("Start Live Tracking")
-    self.SRCtrackingButton.toolTip = "Observe slice from scene viewer"
-    self.SRCtrackingButton.enabled = False
-    self.SRCtrackingButton.clicked.connect(self.StartTimer)
-    realtimebutton.addWidget(self.SRCtrackingButton)
+    # Start Real-Time Tracking 
+    self.RTtrackingButton = qt.QPushButton("Start Live Tracking")
+    self.RTtrackingButton.toolTip = "Observe slice from scene viewer"
+    self.RTtrackingButton.enabled = False
+    self.RTtrackingButton.clicked.connect(self.StartTimer)
+    realtimebutton.addWidget(self.RTtrackingButton)
 
     self.timer = qt.QTimer()
-    self.timer.timeout.connect(self.SRCRealTimeTracking)
+    self.timer.timeout.connect(self.RTRealTimeTracking)
 
     # Stop Real-Time Tracking
     self.stopsequence = qt.QPushButton('Stop Live Tracking')
     self.stopsequence.clicked.connect(self.StopTimer)
     realtimebutton.addWidget(self.stopsequence)
      
-    SRCFormLayout.addRow("", realtimebutton)
+    RTFormLayout.addRow("", realtimebutton)
 
 
     # Add vertical spacer
-    self.layout.addStretch(1)
+    #self.layout.addStretch(0)
 
     ######################
     # Advanced Parameters#
@@ -218,53 +198,19 @@ class NeedleSegmenterWidget(ScriptedLoadableModuleWidget):
     self.ridgeOperatorWidget.setToolTip("set up meijering filter threshold")
     advancedFormLayout.addRow("Ridge Operator Threshold", self.ridgeOperatorWidget)
 
-    #
-    # check box to trigger taking screen shots for later use in tutorials
-    #
-    self.enableScreenshotsFlagCheckBox = qt.QCheckBox()
-    self.enableScreenshotsFlagCheckBox.checked = 0
-    self.enableScreenshotsFlagCheckBox.setToolTip("If checked, take screen shots for tutorials. Use Save Data to write them to disk.")
-    parametersFormLayout.addRow("Enable Screenshots", self.enableScreenshotsFlagCheckBox)
-
-    #
-    # Manual apply Button
-    #
-    self.applyButton = qt.QPushButton("Manual")
-    self.applyButton.toolTip = "Select slice manually"
-    self.applyButton.enabled = False
-    advancedFormLayout.addRow(self.applyButton)
-
+    self.layout.addStretch(1)
+    
     # Refresh Apply button state
     self.onSelect()
 
-    #
-    # check box to trigger preview final processed image
-    #
-    self.enableprocessedimagecheckbox = qt.QCheckBox()
-    self.enableprocessedimagecheckbox.checked = 0
-    self.enableprocessedimagecheckbox.setToolTip("If checked, take screen shots for tutorials. Use Save Data to write them to disk.")
-    advancedFormLayout.addRow("Enable Processed Image", self.enableprocessedimagecheckbox)
-
     # connections
-    self.applyButton.connect('clicked(bool)', self.onApplyButton)
-    self.trackingButton.connect('clicked(bool)', self.onRealTimeTracking)
-    self.SRCtrackingButton.connect('clicked(bool)', self.SRCRealTimeTracking)
+    self.RTtrackingButton.connect('clicked(bool)', self.RTRealTimeTracking)
     self.autosliceselecterButton.connect('clicked(bool)', self.autosliceselecter)
     self.magnitudevolume.connect("currentNodeChanged(vtkMRMLNode*)", self.onSelect)
     self.phasevolume.connect("currentNodeChanged(vtkMRMLNode*)", self.onSelect)
     self.lastMatrix = vtk.vtkMatrix4x4()
     self.timer = qt.QTimer()
-    self.timer.timeout.connect(self.SRCRealTimeTracking) 
-    self.SimTimer = qt.QTimer()
-    self.SimTimer.timeout.connect(self.onRealTimeTracking)
-
-  def SimStartTimer(self):
-      self.SimTimer.start(int(1000/int(50)))
-      self.counter = 0
-
-  def SimStopTimer(self):
-      self.SimTimer.stop()
-      print ("Stopped Simulated Tracking...")
+    self.timer.timeout.connect(self.RTRealTimeTracking) 
 
   def StartTimer(self):
     self.timer.start(int(1000/float(self.fpsBox.value)))
@@ -278,10 +224,8 @@ class NeedleSegmenterWidget(ScriptedLoadableModuleWidget):
     pass
 
   def onSelect(self):
-    self.applyButton.enabled = self.magnitudevolume.currentNode() and self.phasevolume.currentNode()
-    self.trackingButton.enabled = self.magnitudevolume.currentNode() and self.phasevolume.currentNode()
     self.autosliceselecterButton.enabled = self.magnitudevolume.currentNode() and self.phasevolume.currentNode()
-    self.SRCtrackingButton.enabled = self.magnitudevolume.currentNode() and self.phasevolume.currentNode()
+    self.RTtrackingButton.enabled = self.magnitudevolume.currentNode() and self.phasevolume.currentNode()
 
   def getViewSelecter(self):
     viewSelecter = None
@@ -295,9 +239,6 @@ class NeedleSegmenterWidget(ScriptedLoadableModuleWidget):
     
   def autosliceselecter (self):
     logic = NeedleSegmenterLogic()
-    enableProcessedFlag = self.enableprocessedimagecheckbox.checked
-    if (enableProcessedFlag==True):
-      enablenumber = 1
       
     viewSelecter = self.getViewSelecter()
     maskThreshold = self.maskThresholdWidget.value
@@ -307,19 +248,7 @@ class NeedleSegmenterWidget(ScriptedLoadableModuleWidget):
         
     logic.needlefinder(self.magnitudevolume.currentNode(), self.phasevolume.currentNode(), maskThreshold, ridgeOperator, viewSelecter, debug_flag)
 
-  def onRealTimeTracking(self):
-    self.counter = 0
-    logic = NeedleSegmenterLogic()
-    
-    viewSelecter = self.getViewSelecter()
-    maskThreshold = self.maskThresholdWidget.value
-    ridgeOperator = self.ridgeOperatorWidget.value
-
-    debug_flag = self.debugFlagCheckBox.checked
-    
-    logic.realtime(self.magnitudevolume.currentNode(), self.phasevolume.currentNode(), maskThreshold, ridgeOperator, viewSelecter, self.counter, self.lastMatrix, debug_flag)
-
-  def SRCRealTimeTracking(self):
+  def RTRealTimeTracking(self):
   #set observer node so that i can the image as it updates
     self.counter = 0
     logic = NeedleSegmenterLogic()
@@ -329,19 +258,8 @@ class NeedleSegmenterWidget(ScriptedLoadableModuleWidget):
 
     debug_flag = self.debugFlagCheckBox.checked
         
-    logic.SRCrealtime(self.magnitudevolume.currentNode(), self.phasevolume.currentNode(), maskThreshold, ridgeOperator, viewSelecter, self.counter, debug_flag)
+    logic.RTrealtime(self.magnitudevolume.currentNode(), self.phasevolume.currentNode(), maskThreshold, ridgeOperator, viewSelecter, self.counter, debug_flag)
 
-  def onApplyButton(self):
-    logic = NeedleSegmenterLogic()
-    imageSlice = self.imageSliceSliderWidget.value
-    maskThreshold = self.maskThresholdWidget.value
-    ridgeOperator = self.ridgeOperatorWidget.value
-    
-    debug_flag = self.debugFlagCheckBox.checked
-
-    logic.run(self.magnitudevolume.currentNode(), self.phasevolume.currentNode(), imageSlice, maskThreshold, ridgeOperator, debug_flag)
-
-    
 class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
 
   def __init__(self):
@@ -686,7 +604,6 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
     node.SetName(name)
     sitkUtils.PushVolumeToSlicer(sitkImage, name, 0, True)
 
-  
 
   def findSliceIndex(self, viewSelecter):
     
@@ -709,7 +626,7 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
     return (slice_index, sliceNode, fov, offset)
   
   
-  def SRCrealtime(self, magnitudevolume , phasevolume, maskThreshold, ridgeOperator,viewSelecter, counter, debugFlag):
+  def RTrealtime(self, magnitudevolume , phasevolume, maskThreshold, ridgeOperator,viewSelecter, counter, debugFlag):
     
     # (slice_index, sliceNode, fov, offset) = self.findSliceIndex(viewSelecter)
     slice_index = 0   
@@ -720,48 +637,7 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
     slice_logic = slicer.app.layoutManager().sliceWidget(''+ str(viewSelecter)).sliceLogic()
     slice_logic.GetSliceCompositeNode().SetBackgroundVolumeID(magnitudevolume.GetID())
 
-
-    # view_selecter = slicer.mrmlScene.GetNodeByID('vtkMRMLSliceNode'+ str(viewSelecter))
-    # sliceNode.SetFieldOfView(fov[0],fov[1],fov[2])
-    #sliceNode.SetSliceOffset(offset)
-
     
-  def realtime(self, magnitudevolume , phasevolume, maskThreshold, ridgeOperator,viewSelecter, counter, lastMatrix, debugFlag):
-
-    ## Counter is disabled for current use, only updates when slice view changes
-    inputransform = slicer.mrmlScene.GetNodeByID('vtkMRMLSliceNode'+ str(viewSelecter)).GetXYToRAS()
-
-    (slice_index, sliceNode, fov, offset) = self.findSliceIndex(viewSelecter)
-      
-    if (not self.CompareMatrices(lastMatrix, inputransform) or counter >= 20) :
-
-      self.detectNeedle(magnitudevolume , phasevolume, maskThreshold, ridgeOperator, slice_index, debugFlag)
-     
-      ## Setting the Slice view 
-      slice_logic = slicer.app.layoutManager().sliceWidget(''+ str(viewSelecter)).sliceLogic()
-      slice_logic.GetSliceCompositeNode().SetBackgroundVolumeID(magnitudevolume.GetID())
-
-      # view_selecter = slicer.mrmlScene.GetNodeByID('vtkMRMLSliceNode'+ str(viewSelecter))
-      sliceNode.SetFieldOfView(fov[0],fov[1],fov[2])
-      sliceNode.SetSliceOffset(offset)
-      
-      # self.lastMatrix = view_selecter.GetXYToRAS()
-      self.counter = 0
-      lastMatrix.DeepCopy(inputransform)
-      return True
-   
-    else: 
-      counter = counter + 1
-
-      
-  def CompareMatrices(self, m, n):
-    for i in range(0,4):
-      for j in range(0,4):
-        if m.GetElement(i,j) != n.GetElement(i,j):
-          return False
-    return True
-
-
   def needlefinder(self, magnitudevolume , phasevolume, maskThreshold, ridgeOperator, viewSelecter, debugFlag):
 
     (slice_index, sliceNode, fov, offset) = self.findSliceIndex(viewSelecter)
@@ -782,25 +658,6 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
     # elif (viewSelecter == "Green"):
     #   view_selecter.SetSliceOffset(y_ras)
 
-
-  def run(self, magnitudevolume , phasevolume, imageSlice, maskThreshold, ridgeOperator, debugFlag):
-
-    slice_index = int(imageSlice)
-
-    self.detectNeedle(magnitudevolume , phasevolume, maskThreshold, ridgeOperator, slice_index, debugFlag)
-    
-    #fig, axs = plt.subplots(1,3)
-    #fig.suptitle('Needle Tracking')
-    #
-    #axs[0].imshow(self.phaseunwrapped_numpy, cmap='gray')
-    #axs[1].imshow(self.meiji, cmap='hsv')
-    #axs[1].axis('off')
-    #axs[2].imshow(self.mask_borderless,zorder=1, cmap='gray')
-    #axs[2].scatter(self.x1,self.y1,zorder=2, s=1)
-    #axs[2].axis('off')
-    #plt.savefig('mygraph.png')
-    #
-    return True
 
 class NeedleSegmenterTest(ScriptedLoadableModuleTest):
 
