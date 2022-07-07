@@ -42,35 +42,52 @@ class NeedleSegmenterWidget(ScriptedLoadableModuleWidget):
     # Layout within the dummy collapsible button
     parametersFormLayout = qt.QFormLayout(parametersCollapsibleButton)
 
-    #
-    # input magnitude volume
-    #
-    self.magnitudevolume = slicer.qMRMLNodeComboBox()
-    self.magnitudevolume.nodeTypes = ["vtkMRMLScalarVolumeNode"]
-    self.magnitudevolume.selectNodeUponCreation = True
-    self.magnitudevolume.addEnabled = True
-    self.magnitudevolume.removeEnabled = True
-    self.magnitudevolume.noneEnabled = True
-    self.magnitudevolume.showHidden = False
-    self.magnitudevolume.showChildNodeTypes = False
-    self.magnitudevolume.setMRMLScene( slicer.mrmlScene )
-    self.magnitudevolume.setToolTip("Select the magnitude image")
-    parametersFormLayout.addRow("Magnitude Image: ", self.magnitudevolume)
 
     #
-    # input phase volume
+    # Input Mode
     #
-    self.phasevolume = slicer.qMRMLNodeComboBox()
-    self.phasevolume.nodeTypes = ["vtkMRMLScalarVolumeNode"]
-    self.phasevolume.selectNodeUponCreation = True
-    self.phasevolume.addEnabled = True
-    self.phasevolume.removeEnabled = True
-    self.phasevolume.noneEnabled = True
-    self.phasevolume.showHidden = False
-    self.phasevolume.showChildNodeTypes = False
-    self.phasevolume.setMRMLScene( slicer.mrmlScene )
-    self.phasevolume.setToolTip("Select the phase image")
-    parametersFormLayout.addRow("Phase Image: ", self.phasevolume)
+    self.inputModePhase = qt.QRadioButton('Magnitude/Phase')
+    self.inputModeRealImag = qt.QRadioButton('Real/Imaginal')
+    self.inputModePhase.checked = 1
+    
+    self.inputModeButtonGroup = qt.QButtonGroup()
+    self.inputModeButtonGroup.addButton(self.inputModePhase)
+    self.inputModeButtonGroup.addButton(self.inputModeRealImag)
+
+    inputModeLayout = qt.QHBoxLayout(parametersCollapsibleButton)
+    inputModeLayout.addWidget(self.inputModePhase)
+    inputModeLayout.addWidget(self.inputModeRealImag)
+    parametersFormLayout.addRow("Input Mode:",inputModeLayout)
+
+    #
+    # input magnitude/real volume (first volume)
+    #
+    self.firstVolumeSelector = slicer.qMRMLNodeComboBox()
+    self.firstVolumeSelector.nodeTypes = ["vtkMRMLScalarVolumeNode"]
+    self.firstVolumeSelector.selectNodeUponCreation = True
+    self.firstVolumeSelector.addEnabled = True
+    self.firstVolumeSelector.removeEnabled = True
+    self.firstVolumeSelector.noneEnabled = True
+    self.firstVolumeSelector.showHidden = False
+    self.firstVolumeSelector.showChildNodeTypes = False
+    self.firstVolumeSelector.setMRMLScene( slicer.mrmlScene )
+    self.firstVolumeSelector.setToolTip("Select the magnitude/real image")
+    parametersFormLayout.addRow("Magnitude/Real Image: ", self.firstVolumeSelector)
+
+    #
+    # input phase/imaginary volume (second volume)
+    #
+    self.secondVolumeSelector = slicer.qMRMLNodeComboBox()
+    self.secondVolumeSelector.nodeTypes = ["vtkMRMLScalarVolumeNode"]
+    self.secondVolumeSelector.selectNodeUponCreation = True
+    self.secondVolumeSelector.addEnabled = True
+    self.secondVolumeSelector.removeEnabled = True
+    self.secondVolumeSelector.noneEnabled = True
+    self.secondVolumeSelector.showHidden = False
+    self.secondVolumeSelector.showChildNodeTypes = False
+    self.secondVolumeSelector.setMRMLScene( slicer.mrmlScene )
+    self.secondVolumeSelector.setToolTip("Select the phase/imaginary image")
+    parametersFormLayout.addRow("Phase/Imaginary Image: ", self.secondVolumeSelector)
    
     #
     # Select which scene view to track
@@ -80,6 +97,10 @@ class NeedleSegmenterWidget(ScriptedLoadableModuleWidget):
     self.sceneViewButton_green = qt.QRadioButton('Green')
     self.sceneViewButton_green.checked = 1
 
+    self.sceneViewButtonGroup = qt.QButtonGroup()
+    self.sceneViewButtonGroup.addButton(self.sceneViewButton_red)
+    self.sceneViewButtonGroup.addButton(self.sceneViewButton_yellow)
+    self.sceneViewButtonGroup.addButton(self.sceneViewButton_green)
     
     layout = qt.QHBoxLayout(parametersCollapsibleButton)
     layout.addWidget(self.sceneViewButton_red)
@@ -204,8 +225,8 @@ class NeedleSegmenterWidget(ScriptedLoadableModuleWidget):
     # connections
     self.RTtrackingButton.connect('clicked(bool)', self.RTRealTimeTracking)
     self.autosliceselecterButton.connect('clicked(bool)', self.autosliceselecter)
-    self.magnitudevolume.connect("currentNodeChanged(vtkMRMLNode*)", self.onSelect)
-    self.phasevolume.connect("currentNodeChanged(vtkMRMLNode*)", self.onSelect)
+    self.firstVolumeSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onSelect)
+    self.secondVolumeSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onSelect)
     self.lastMatrix = vtk.vtkMatrix4x4()
     self.timer = qt.QTimer()
     self.timer.timeout.connect(self.RTRealTimeTracking) 
@@ -222,8 +243,8 @@ class NeedleSegmenterWidget(ScriptedLoadableModuleWidget):
     pass
 
   def onSelect(self):
-    self.autosliceselecterButton.enabled = self.magnitudevolume.currentNode() and self.phasevolume.currentNode()
-    self.RTtrackingButton.enabled = self.magnitudevolume.currentNode() and self.phasevolume.currentNode()
+    self.autosliceselecterButton.enabled = self.firstVolumeSelector.currentNode() and self.secondVolumeSelector.currentNode()
+    self.RTtrackingButton.enabled = self.firstVolumeSelector.currentNode() and self.secondVolumeSelector.currentNode()
 
   def getViewSelecter(self):
     viewSelecter = None
@@ -243,8 +264,9 @@ class NeedleSegmenterWidget(ScriptedLoadableModuleWidget):
     ridgeOperator = self.ridgeOperatorWidget.value
 
     debug_flag = self.debugFlagCheckBox.checked
+    use_real_imag = self.inputModeRealImag.checked
         
-    logic.needlefinder(self.magnitudevolume.currentNode(), self.phasevolume.currentNode(), maskThreshold, ridgeOperator, viewSelecter, debug_flag)
+    logic.needlefinder(self.firstVolumeSelector.currentNode(), self.secondVolumeSelector.currentNode(), maskThreshold, ridgeOperator, viewSelecter, debug_flag, use_real_imag)
 
   def RTRealTimeTracking(self):
   #set observer node so that i can the image as it updates
@@ -255,8 +277,9 @@ class NeedleSegmenterWidget(ScriptedLoadableModuleWidget):
     ridgeOperator = self.ridgeOperatorWidget.value
 
     debug_flag = self.debugFlagCheckBox.checked
+    use_real_imag = self.inputModeRealImag.checked
         
-    logic.RTrealtime(self.magnitudevolume.currentNode(), self.phasevolume.currentNode(), maskThreshold, ridgeOperator, viewSelecter, self.counter, debug_flag)
+    logic.RTrealtime(self.firstVolumeSelector.currentNode(), self.secondVolumeSelector.currentNode(), maskThreshold, ridgeOperator, viewSelecter, self.counter, debug_flag, use_real_imag)
 
 class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
 
@@ -277,17 +300,56 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
       return False
     return True
 
-  def detectNeedle(self, magnitudevolume, phasevolume, maskThreshold, ridgeOperator, slice_index, debug_flag=False):
+  def detectNeedle(self, firstVolume, secondVolume, maskThreshold, ridgeOperator, slice_index, debug_flag=False, use_real_imag=False):
 
-    magn_matrix = vtk.vtkMatrix4x4()
-    magnitudevolume.GetIJKToRASMatrix(magn_matrix)
+    sitk_magn = None
+    sitk_phase = None
+    matrix = vtk.vtkMatrix4x4()
+    firstVolume.GetIJKToRASMatrix(matrix)
+    numpy_magn = None
+    numpy_phase = None
 
-    sitk_magn = sitkUtils.PullVolumeFromSlicer(magnitudevolume)
-    sitk_phase = sitkUtils.PullVolumeFromSlicer(phasevolume)
+    if use_real_imag:
+      # Pull the real/imaginary volumes from the MRML scene and convert them to magnitude/phase volumes
+      sitk_real = sitkUtils.PullVolumeFromSlicer(firstVolume)
+      sitk_imag = sitkUtils.PullVolumeFromSlicer(secondVolume)
+      numpy_real = sitk.GetArrayFromImage(sitk_real)
+      numpy_imag = sitk.GetArrayFromImage(sitk_imag)
+      numpy_comp = numpy_real + 1.0j * numpy_imag
+      numpy_magn = np.absolute(numpy_comp)
+      numpy_phase = np.angle(numpy_comp)
+      sitk_magn = sitk.GetImageFromArray(numpy_magn)
+      sitk_phase = sitk.GetImageFromArray(numpy_phase)
+      sitk_magn.SetOrigin(sitk_real.GetOrigin())
+      sitk_magn.SetSpacing(sitk_real.GetSpacing())
+      sitk_magn.SetDirection(sitk_real.GetDirection())
+      sitk_phase.SetOrigin(sitk_real.GetOrigin())
+      sitk_phase.SetSpacing(sitk_real.GetSpacing())
+      sitk_phase.SetDirection(sitk_real.GetDirection())
+      if debug_flag:
+        self.pushSitkToSlicer(sitk_magn, 'debug_magn')
+        self.pushSitkToSlicer(sitk_phase, 'debug_phase')
+    else:
+      # Pull the magnitude/phase volumes from the MRML scene
+      sitk_magn = sitkUtils.PullVolumeFromSlicer(firstVolume)
+      sitk_phase = sitkUtils.PullVolumeFromSlicer(secondVolume)
+      numpy_magn = sitk.GetArrayFromImage(sitk_magn)
+      numpy_phase = sitk.GetArrayFromImage(sitk_phase)
 
-    numpy_magn = sitk.GetArrayFromImage(sitk_magn)
-    numpy_phase = sitk.GetArrayFromImage(sitk_phase)
-    
+      # Adjust the value range of the phase image to [-pi, pi] 
+      pvImageData = secondVolume.GetImageData()
+      scalarType = ''
+      if pvImageData != None:
+        scalarType = pvImageData.GetScalarTypeAsString()
+      
+      # Scale to radian
+      if scalarType == 'unsigned short':
+        #print('pvImageData*numpy.pi/2048.0 - numpy.pi')
+        sitk_phase = sitk_phase*np.pi/2048.0 - np.pi
+      else:
+        #print('pvImageData*numpy.pi/4096.0')
+        sitk_phase = sitk_phase*np.pi/4096.0
+
     #2D Slice Selector
     ### 3 3D values are : numpy_magn , numpy_phase, mask
     numpy_magn_slice = numpy_magn[slice_index,:,:]
@@ -335,19 +397,6 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
       sitk_mask.SetSpacing(sitk_phase.GetSpacing())
       sitk_mask.SetDirection(sitk_phase.GetDirection())
       self.pushSitkToSlicer(sitk_mask, 'cv_mask')
-
-    pvImageData = phasevolume.GetImageData()
-    scalarType = ''
-    if pvImageData != None:
-      scalarType = pvImageData.GetScalarTypeAsString()
-
-    # Scale to radian
-    if scalarType == 'unsigned short':
-      print('pvImageData*numpy.pi/2048.0 - numpy.pi')
-      sitk_phase = sitk_phase*np.pi/2048.0 - np.pi
-    else:
-      print('pvImageData*numpy.pi/4096.0')
-      sitk_phase = sitk_phase*np.pi/4096.0
 
     if debug_flag:
       self.pushSitkToSlicer(sitk_phase, 'debug_phase')
@@ -559,7 +608,7 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
       #coords = [x2,y2,slice_index]
       coords_ijk = [x2,y2,slice_index,1.0]
       
-      coords_ras = magn_matrix.MultiplyPoint(coords_ijk)
+      coords_ras = matrix.MultiplyPoint(coords_ijk)
       coords_ras = coords_ras[0:3]
 
       # Fiducial Creation
@@ -624,27 +673,27 @@ class NeedleSegmenterLogic(ScriptedLoadableModuleLogic):
     return (slice_index, sliceNode, fov, offset)
   
   
-  def RTrealtime(self, magnitudevolume , phasevolume, maskThreshold, ridgeOperator,viewSelecter, counter, debugFlag):
+  def RTrealtime(self, firstVolume , secondVolume, maskThreshold, ridgeOperator,viewSelecter, counter, debugFlag, useRealImag):
     
     # (slice_index, sliceNode, fov, offset) = self.findSliceIndex(viewSelecter)
     slice_index = 0   
 
-    self.detectNeedle(magnitudevolume , phasevolume, maskThreshold, ridgeOperator, slice_index, debugFlag)
+    self.detectNeedle(firstVolume , secondVolume, maskThreshold, ridgeOperator, slice_index, debugFlag, useRealImag)
 
     ## Setting the Slice view 
     slice_logic = slicer.app.layoutManager().sliceWidget(''+ str(viewSelecter)).sliceLogic()
-    slice_logic.GetSliceCompositeNode().SetBackgroundVolumeID(magnitudevolume.GetID())
+    slice_logic.GetSliceCompositeNode().SetBackgroundVolumeID(firstVolume.GetID())
 
     
-  def needlefinder(self, magnitudevolume , phasevolume, maskThreshold, ridgeOperator, viewSelecter, debugFlag):
+  def needlefinder(self, firstVolume , secondVolume, maskThreshold, ridgeOperator, viewSelecter, debugFlag, useRealImag):
 
     (slice_index, sliceNode, fov, offset) = self.findSliceIndex(viewSelecter)
 
-    self.detectNeedle(magnitudevolume , phasevolume, maskThreshold, ridgeOperator, slice_index, debugFlag)
+    self.detectNeedle(firstVolume , secondVolume, maskThreshold, ridgeOperator, slice_index, debugFlag, useRealImag)
 
     ## Setting the Slice view 
     slice_logic = slicer.app.layoutManager().sliceWidget(''+ str(viewSelecter)).sliceLogic()
-    slice_logic.GetSliceCompositeNode().SetBackgroundVolumeID(magnitudevolume.GetID())
+    slice_logic.GetSliceCompositeNode().SetBackgroundVolumeID(firstVolume.GetID())
 
     # view_selecter = slicer.mrmlScene.GetNodeByID('vtkMRMLSliceNode'+ str(viewSelecter))
     sliceNode.SetFieldOfView(fov[0],fov[1],fov[2])
