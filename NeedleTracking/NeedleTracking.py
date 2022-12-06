@@ -149,6 +149,7 @@ class NeedleTrackingWidget(ScriptedLoadableModuleWidget):
     # Create timer for Live Tracking
     self.timer = qt.QTimer()
     self.timer.timeout.connect(self.needleTracker)
+    self.counter = 0 
     
     # Start Live Tracking 
     self.startTrackingButton = qt.QPushButton("Start Live Tracking")
@@ -233,7 +234,7 @@ class NeedleTrackingWidget(ScriptedLoadableModuleWidget):
   def startTimer(self):
     self.timer.start(int(1000/float(self.fpsBox.value)))
     print ("Started Live Tracking ...")
-    #self.counter = 0 # Not in use
+    self.counter = 0 
 
   def stopTimer (self):
     self.timer.stop()
@@ -263,7 +264,8 @@ class NeedleTrackingWidget(ScriptedLoadableModuleWidget):
     hessianThreshold = self.hessianThresholdWidget.value
     debugFlag = self.debugFlagCheckBox.checked
     useRealImag = self.inputModeRealImag.checked
-    logic.getNeedleTip(self.firstVolumeSelector.currentNode(), self.secondVolumeSelector.currentNode(), maskThreshold, hessianThreshold, viewSelecter, debugFlag, useRealImag)
+    self.counter += 1
+    logic.getNeedleTip(self.firstVolumeSelector.currentNode(), self.secondVolumeSelector.currentNode(), maskThreshold, hessianThreshold, viewSelecter, debugFlag, useRealImag, self.counter)
 
 ################################################################################################################################################
 # Logic Class
@@ -275,7 +277,7 @@ class NeedleTrackingLogic(ScriptedLoadableModuleLogic):
     ScriptedLoadableModuleLogic.__init__(self)
     self.cliParamNode = None
 
-  def segmentNeedle(self, firstVolume, secondVolume, maskThreshold, hessianThreshold, sliceIndex, debugFlag=False, useRealImag=False):
+  def segmentNeedle(self, firstVolume, secondVolume, maskThreshold, hessianThreshold, sliceIndex, debugFlag=False, useRealImag=False, counter=1):
 
     ####################################
     ##                                ##
@@ -317,25 +319,30 @@ class NeedleTrackingLogic(ScriptedLoadableModuleLogic):
     else:
       sitk_magn = sitkUtils.PullVolumeFromSlicer(firstVolume)
       sitk_phase = sitkUtils.PullVolumeFromSlicer(secondVolume)
-      
+
+      magImageData = firstVolume.GetImageData()
+      phaseImageData = secondVolume.GetImageData()
+            
       # Adjust the value range of the phase image to [-pi, pi] 
-      # Results from tests with AMIGO scanner images: 
-      # Magnitude image = unsigned short
-      # Phase image = short (signed)
-      pvImageData = secondVolume.GetImageData()
-      scalarType = ''
-      if pvImageData != None:
-        scalarType = pvImageData.GetScalarTypeAsString()
-      if scalarType == 'unsigned short':
+      if phaseImageData.GetScalarTypeAsString() == 'unsigned short':
         sitk_phase = sitk_phase*np.pi/2048.0 - np.pi
       else:
         sitk_phase = sitk_phase*np.pi/4096.0
       
       numpy_magn = sitk.GetArrayFromImage(sitk_magn)
       numpy_phase = sitk.GetArrayFromImage(sitk_phase)
+
+      # if debugFlag:
+      #   # In tests with AMIGO scanner images: 
+      #   # Magnitude image = unsigned short
+      #   # Phase image = short (signed)
+      #   print('Magnitude image data type:')
+      #   print(magImageData.GetScalarTypeAsString())
+      #   print('Phase image data type:')
+      #   print(phaseImageData.GetScalarTypeAsString())
     
     # Get slice
-    imgMag = numpy_magn[sliceIndex,:,:]#.astype(np.uint8)
+    imgMag = numpy_magn[sliceIndex,:,:]
     imgPhase = numpy_phase[sliceIndex,:,:]
     
     ####################################
@@ -355,7 +362,7 @@ class NeedleTrackingLogic(ScriptedLoadableModuleLogic):
       sitk_mask.SetOrigin(sitk_magn.GetOrigin())
       sitk_mask.SetSpacing(sitk_magn.GetSpacing())
       sitk_mask.SetDirection(sitk_magn.GetDirection())      
-      self.pushSitkToSlicer(sitk_mask, 'debug_mask')
+      self.pushSitkToSlicer(sitk_mask, 'debug_mask'+str(counter))
       
     ####################################
     ##                                ##
@@ -364,8 +371,8 @@ class NeedleTrackingLogic(ScriptedLoadableModuleLogic):
     ####################################
 
     phaseMasked = np.ma.array(imgPhase, mask=boolMask)  # Mask phase image
-    phaseUnwrapped = unwrap_phase(phaseMasked)          # Use unwrap from scikit-image (module: restoration)
-    phaseUnwrapped = (255*(phaseUnwrapped - np.min(phaseUnwrapped))/np.ptp(phaseUnwrapped)).astype(int)  #Normalize from float64 to grayscale (0-255) uint8
+    phaseUnwrapped = unwrap_phase(phaseMasked)                                              # Use unwrap from scikit-image (module: restoration)
+    phaseUnwrapped = 255*((phaseUnwrapped - np.min(phaseUnwrapped))/np.ptp(phaseUnwrapped)) # Normalize to grayscale (0-255)
 
     if debugFlag:
       # Construct phase masked ITK image
@@ -375,16 +382,15 @@ class NeedleTrackingLogic(ScriptedLoadableModuleLogic):
       sitk_phase_cropped.SetOrigin(sitk_phase.GetOrigin())
       sitk_phase_cropped.SetSpacing(sitk_phase.GetSpacing())
       sitk_phase_cropped.SetDirection(sitk_phase.GetDirection())      
-      self.pushSitkToSlicer(sitk_phase_cropped, 'debug_phase_masked')
+      self.pushSitkToSlicer(sitk_phase_cropped, 'debug_phase_masked'+str(counter))
 
     ####################################
     ##                                ##
     ## Step 3: High pass filter       ##
     ##         (Sharpening)           ##
     ####################################
-
-    # Apply butterworth high pass filter to sharpen
-    phaseSharpen = filters.butterworth(phaseUnwrapped, cutoff_frequency_ratio=0.05, order=4.0, high_pass=True) 
+    
+    phaseSharpen = filters.butterworth(phaseUnwrapped, cutoff_frequency_ratio=0.05, order=4.0, high_pass=True)  # Sharpen with high pass filter
     
     if debugFlag:
       # Construct phase sharpen ITK image
@@ -394,7 +400,7 @@ class NeedleTrackingLogic(ScriptedLoadableModuleLogic):
       sitk_phase_sharpen.SetOrigin(sitk_phase.GetOrigin())
       sitk_phase_sharpen.SetSpacing(sitk_phase.GetSpacing())
       sitk_phase_sharpen.SetDirection(sitk_phase.GetDirection())      
-      self.pushSitkToSlicer(sitk_phase_sharpen, 'debug_phase_sharpen')
+      self.pushSitkToSlicer(sitk_phase_sharpen, 'debug_phase_sharpen'+str(counter))
 
     ####################################
     ##                                ##
@@ -402,19 +408,18 @@ class NeedleTrackingLogic(ScriptedLoadableModuleLogic):
     ##                                ##
     ####################################
 
-    # Mask image with Dilation
-    boolMaskDilated = morphology.dilation(boolMask, morphology.disk(10)) # bool mask
-    phaseSharpen[boolMaskDilated] = 0
+    boolMaskDilated = morphology.dilation(boolMask, morphology.disk(10))  # Bool mask with dilated borders
+    phaseSharpen[boolMaskDilated] = np.mean(phaseSharpen)                 # Apply dilated mask
 
     if debugFlag:
-      # Construct mask ITK image
+      # Construct masked phase sharpen ITK image
       imgPhaseSharpenMasked = np.zeros((1,phaseSharpen.shape[0],phaseSharpen.shape[1]))
       imgPhaseSharpenMasked[0,:,:] = np.array(phaseSharpen)
       sitk_phase_sharpen_masked = sitk.GetImageFromArray(imgPhaseSharpenMasked)
       sitk_phase_sharpen_masked.SetOrigin(sitk_phase.GetOrigin())
       sitk_phase_sharpen_masked.SetSpacing(sitk_phase.GetSpacing())
       sitk_phase_sharpen_masked.SetDirection(sitk_phase.GetDirection())      
-      self.pushSitkToSlicer(sitk_phase_sharpen_masked, 'debug_phase_sharpen_masked')
+      self.pushSitkToSlicer(sitk_phase_sharpen_masked, 'debug_phase_sharpen_masked'+str(counter))
 
     ####################################
     ##                                ##
@@ -425,16 +430,6 @@ class NeedleTrackingLogic(ScriptedLoadableModuleLogic):
     # Use hessian matrix determinant blob detector
     blobs_doh = feature.blob_doh(util.invert(phaseSharpen), threshold=hessianThreshold) # blobs_doh = (y,x,radius)
     blobsSorted = np.argsort(blobs_doh[:,2]) # Sorted by ascending radius of blobs           
-      
-    if debugFlag:
-      # Construct mask ITK image
-      imgPhaseSharpenMasked = np.zeros((1,phaseSharpen.shape[0],phaseSharpen.shape[1]))
-      imgPhaseSharpenMasked[0,:,:] = np.array(phaseSharpen)
-      sitk_phase_sharpen_masked = sitk.GetImageFromArray(imgPhaseSharpenMasked)
-      sitk_phase_sharpen_masked.SetOrigin(sitk_phase.GetOrigin())
-      sitk_phase_sharpen_masked.SetSpacing(sitk_phase.GetSpacing())
-      sitk_phase_sharpen_masked.SetDirection(sitk_phase.GetDirection())      
-      self.pushSitkToSlicer(sitk_phase_sharpen_masked, 'debug_phase_sharpen_masked')
       
     ####################################
     ##                                ##
@@ -463,6 +458,11 @@ class NeedleTrackingLogic(ScriptedLoadableModuleLogic):
         fidNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode", "needle_tip")   
         fidNode.AddFiducialFromArray(coords_ras)   
       
+      if debugFlag:
+        print('Number of blobs = ',str(blobsSorted.size))   
+        print('Tip (ijk) = ',str(coords_ijk))   
+        print('Tip (ras) = ',str(coords_ras))   
+
     else:
       print('Needle tip not detected')
     return True
@@ -473,17 +473,18 @@ class NeedleTrackingLogic(ScriptedLoadableModuleLogic):
     sitkUtils.PushVolumeToSlicer(sitkImage, name, 0, True)
   
   def findSliceIndex(self, viewSelecter):   
-    ## Find current slice index
+    # Find current slice index
     layoutManager = slicer.app.layoutManager()
     sliceWidgetLogic = layoutManager.sliceWidget(str(viewSelecter)).sliceLogic()
     return sliceWidgetLogic.GetSliceIndexFromOffset(sliceWidgetLogic.GetSliceOffset()) - 1
 
+  def getNeedleTip(self, firstVolume , secondVolume, maskThreshold, hessianThreshold, viewSelecter, debugFlag, useRealImag, counter):
+    if debugFlag:
+      print('Counter = ',str(counter))   
     
-  def getNeedleTip(self, firstVolume , secondVolume, maskThreshold, hessianThreshold, viewSelecter, debugFlag, useRealImag):
-
     # Detect needle in current slice from selected view
     sliceIndex = self.findSliceIndex(viewSelecter)
-    self.segmentNeedle(firstVolume , secondVolume, maskThreshold, hessianThreshold, sliceIndex, debugFlag, useRealImag)
+    self.segmentNeedle(firstVolume , secondVolume, maskThreshold, hessianThreshold, sliceIndex, debugFlag, useRealImag, counter)
 
     # Set the Slice view (is this needed?)
     slice_logic = slicer.app.layoutManager().sliceWidget(str(viewSelecter)).sliceLogic()
