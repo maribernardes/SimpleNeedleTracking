@@ -15,12 +15,12 @@ Libraries required can be found in python_requirements.txt
 USAGE: 
 1. Define the input mode:
 - Two input modes are accepted:
-    -- Magnitude and phase
-    -- Real and imaginary
+    1. Magnitude and phase
+    2. Real and imaginary
 2. Select the image pair
 3. Select the scene view where the needle will be tracked
 4. Press button for tracking
 - Two tracking options are available
-    -- Track once with current image in the scene view ("Detect Needle" button)
-    -- Cyclic track with timer defined by update rate ("Start/Stop Live Tracking" buttons) 
+    1. Track once with current image in the scene view ("Detect Needle" button)
+    2. Cyclic track with timer defined by update rate ("Start/Stop Live Tracking" buttons) 
 
