@@ -1,33 +1,26 @@
-# NeedleSegmenter
-NeedleSegmenter module in 3Dslicer
+# NeedleTracking
+NeedleTracking module in 3D Slicer
 
-This 3D Slicer module locates the needle tip from Magnitude and phase MR images. 
+This 3D Slicer module locates the needle tip from 2D MR images
+Input requirement: 
+    Magnitude/Phase image or Real/Imaginary image. 
+Uses scikit unwrapping algorithm
+
 
 INSTALL:
-
-1. Slicer has to be built from source code. Follow the instructions in the following link : https://slicer.readthedocs.io/en/latest/developer_guide/build_instructions/index.html 
-    > Python 3.6.X needed in the build  
-
-2. Build the the phase unwrapping CLI module inside your build tree. Code for the phase unwrapping module is provided by Junichi Tokuda at :
-github.com/tokjun/PhaseUnwrapping
-
-3. Add the NeedSegmenter module as a scripted python module. 
-
-4. Install required python libraries in Slicer's python using pip module. Libraries required can be found in python_requirements.txt
+1. Add the NeedTracking module as a scripted python module. 
+2. Install required python libraries in 3D Slicer's python using the Python Interactor interface. 
+Libraries required can be found in python_requirements.txt
 
 USAGE: 
-
-1. Select the magnitude and phase image of the desired volume. The mask is automatically generated from the magnitude image. 
-
-2. Four modes are available :
- A) Manual Segmentation using slice slider (advanced)
- B) Segment Needle from the slice shown in the scene view 
- C) Simulated Tracking automates needle tracking while scrolling through different slices
- D) Live Tracking Protocol used in conjuction with SRC protocol. Adjust the FPS accordingly. 
- 
-Demo of the module can be found under Preview.mp4  
-
-Known bugs
-1. The option to select the scene view of choice is not available. Only the Green scene is active however it can be changed to 
-any view (Axial, Sagittal, Coronal).  
+1. Define the input mode
+Two input modes are excepted:
+    Magnitude and phase
+    Real and imaginary
+2. Select the image pair
+3. Select the scene view where the needle will be tracked
+4. Press button for tracking
+Two tracking options are available
+    Track once with current image in the scene view ("Detect Needle" button)
+    Cyclic track with timer defined by update rate ("Start/Stop Live Tracking" buttons) 
 

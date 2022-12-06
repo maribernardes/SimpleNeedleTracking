@@ -1,7 +1,4 @@
-download the following packages to python inside 3Dslicer using :
-slicer.util.pip_install(package)
+Install the following python packages to 3D Slicer (use 3D Slicer Python Interactor):
 
-1. scipy ==0.15.0 (important to use this version and not the latest)
-2. scikit-image
-3. opencv-python
-4. matplotlib
+slicer.util.pip_install('scipy')
+slicer.util.pip_install('scikit-image')
