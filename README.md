@@ -2,9 +2,10 @@
 NeedleTracking module in 3D Slicer
 
 This 3D Slicer module locates the needle tip from 2D MR images
-Input requirement: 
+- Input requirement: 
     Magnitude/Phase image or Real/Imaginary image. 
-Uses scikit unwrapping algorithm
+- Uses scikit unwrapping algorithm
+- Removed dependencies from OpenCV library
 
 
 INSTALL:
