@@ -724,5 +724,5 @@ class SimpleNeedleTrackingLogic(ScriptedLoadableModuleLogic):
     transformMatrix.SetElement(2,3, centerRAS[2])
     self.tipTrackedNode.SetMatrixTransformToParent(transformMatrix)
     
-    # TODO: Put coordinated in the node
+    #TODO: Error exit?
     return True
