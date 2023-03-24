@@ -159,7 +159,7 @@ class SimpleNeedleTrackingWidget(ScriptedLoadableModuleWidget, VTKObservationMix
     
     # Debug mode check box (output images at intermediate steps)
     self.debugFlagCheckBox = qt.QCheckBox()
-    self.debugFlagCheckBox.checked = 0
+    self.debugFlagCheckBox.checked = True
     self.debugFlagCheckBox.setToolTip('If checked, output images at intermediate steps')
     advancedFormLayout.addRow('Debug', self.debugFlagCheckBox)
     
@@ -169,7 +169,7 @@ class SimpleNeedleTrackingWidget(ScriptedLoadableModuleWidget, VTKObservationMix
     self.maskThresholdWidget.setDecimals(0)
     self.maskThresholdWidget.minimum = 0
     self.maskThresholdWidget.maximum = 255
-    self.maskThresholdWidget.value = 80
+    self.maskThresholdWidget.value = 60
     self.maskThresholdWidget.setToolTip('Set intensity threshold value (0-255) for creating tissue mask. Voxels that have intensities lower than this value will be masked out.')
     advancedFormLayout.addRow('Mask Threshold:', self.maskThresholdWidget)
     
@@ -243,7 +243,14 @@ class SimpleNeedleTrackingWidget(ScriptedLoadableModuleWidget, VTKObservationMix
     self.firstVolume = None
     self.secondVolume = None
     self.sliceIndex = None
-    
+    self.inputMode = None
+    self.maskThreshold = None
+    self.maskClosing = None
+    self.roiSize = None
+    self.sliceIndex = None
+    self.blobThreshold = None
+    self.debugFlag = None
+
     # Initialize module logic
     self.logic = SimpleNeedleTrackingLogic()
   
@@ -372,73 +379,42 @@ class SimpleNeedleTrackingWidget(ScriptedLoadableModuleWidget, VTKObservationMix
     return sliceWidgetLogic.GetSliceIndexFromOffset(sliceWidgetLogic.GetSliceOffset()) - 1
   
   def startTracking(self):
+    print('UI: startTracking()')
     self.isTrackingOn = True
     self.updateButtons()
     # Get parameters
-    inputMode = self._parameterNode.GetParameter('InputMode')
-    maskThreshold = int(float(self._parameterNode.GetParameter('MaskThreshold')))
-    maskClosing = int(float(self._parameterNode.GetParameter('MaskClosing')))
-    debugFlag = self._parameterNode.GetParameter('Debug')
-
-    # Get selected images
-    firstVolume = self.firstVolumeSelector.currentNode()
-    secondVolume = self.secondVolumeSelector.currentNode()
-    sliceIndex = self.getSliceIndex(self.getSelectedView())
-
-    ###### FOR DEBUG ONLY ########
-    firstVolume = slicer.util.getNode('SliceSequence_base_M')
-    secondVolume = slicer.util.getNode('SliceSequence_base_P')
-    roiSize = int(float(self._parameterNode.GetParameter('ROISize')))
-    tipPrediction = self.tipPredictionSelector.currentNode()
-    ##############################
-    
+    self.inputMode = 'MagPhase' if self.inputModeMagPhase.checked else 'RealImag'
+    self.maskThreshold = int(self.maskThresholdWidget.value)
+    self.maskClosing = int(self.maskClosingWidget.value)
+    self.roiSize = int(self.roiSizeWidget.value)
+    self.sliceIndex = self.getSliceIndex(self.getSelectedView())
+    self.blobThreshold = float(self.blobThresholdWidget.value)
+    self.debugFlag = self.debugFlagCheckBox.checked
+    # Get selected nodes
+    self.firstVolume = self.firstVolumeSelector.currentNode()
+    self.secondVolume = self.secondVolumeSelector.currentNode()    
+    self.tipPrediction = self.tipPredictionSelector.currentNode()
     # Set base images
-    self.logic.updateBaseImages(firstVolume, secondVolume, sliceIndex, inputMode, maskThreshold, maskClosing, debugFlag)
-
-    ###### FOR DEBUG ONLY ########
-    firstVolume = self.firstVolumeSelector.currentNode()
-    secondVolume = self.secondVolumeSelector.currentNode()
-    sliceIndex = self.getSliceIndex(self.getSelectedView())  
-    blobThreshold = float(self._parameterNode.GetParameter('BlobThreshold'))
-    # Execute one tracking cycle
-    if self.logic.getNeedle(firstVolume, secondVolume, sliceIndex, tipPrediction, inputMode, roiSize, blobThreshold, debugFlag):
-      
-      print('Tracking successful')
-    else:
-      print('Tracking failed')
-    ##############################
-          
+    self.logic.updateBaseImages(self.firstVolume, self.secondVolume, self.inputMode, self.maskThreshold, self.maskClosing, self.debugFlag)
+    # Create listener to sequence node
+    self.addObserver(self.secondVolume, self.secondVolume.ImageDataModifiedEvent, self.receivedImage)
   
   def stopTracking(self):
     self.isTrackingOn = False
     self.updateButtons()
     #TODO: Define what should to be refreshed
     print('UI: stopTracking()')
+    self.removeObserver(self.secondVolume, self.secondVolume.ImageDataModifiedEvent, self.receivedImage)
   
-  def receivedImage(self):
+  def receivedImage(self, caller=None, event=None):
     if self.isTrackingOn:
-      # Check if tracking was properly initalized
-      if (self.firstVolume is None) or (self.secondVolume is None) or (self.sliceIndex is None):
-        print('ERROR: Sequence images were not defined')
-        return False
+      print('UI: receivedImage()')
+      # Execute one tracking cycle
+      if self.logic.getNeedle(self.firstVolume, self.secondVolume, self.sliceIndex, self.tipPrediction, self.inputMode, self.roiSize, self.blobThreshold, self.debugFlag):
+        print('Tracking successful')
       else:
-        print('UI: receivedImage()')
-        # Get parameters
-        inputMode = self._parameterNode.GetParameter('InputMode')
-        roiSize = int(float(self._parameterNode.GetParameter('ROISize')))
-        blobThreshold = float(self._parameterNode.GetParameter('BlobThreshold'))
-        debugFlag = self._parameterNode.GetParameter('Debug')
-        # Get selected nodes
-        firstVolume = self.firstVolumeSelector.currentNode()
-        secondVolume = self.secondVolumeSelector.currentNode()
-        tipPrediction = self.tipPredictionSelector.currentNode()
-        sliceIndex = self.getSliceIndex(self.getSelectedView())
-        # Execute one tracking cycle
-        if self.logic.getNeedle(firstVolume, secondVolume, sliceIndex, tipPrediction, inputMode, roiSize, blobThreshold, debugFlag):
-          print('Tracking successful')
-        else:
-          print('Tracking failed')
-        
+        print('Tracking failed')
+      
     
 ################################################################################################################################################
 # Logic Class
@@ -468,22 +444,6 @@ class SimpleNeedleTrackingLogic(ScriptedLoadableModuleLogic):
         self.tipTrackedNode.SetName('CurrentTrackedTipTransform')
         print('Created Tracked Tip TransformNode')
 
-    # Check if nodes for storing base volumes (mag/phase) exists, if not, create a new one
-    try:
-        self.baseFirstVolume = slicer.util.getNode('InitialMagnitudeVolume')
-    except:
-        self.baseFirstVolume = slicer.vtkMRMLScalarVolumeNode()
-        slicer.mrmlScene.AddNode(self.baseFirstVolume)
-        self.baseFirstVolume.SetName('InitialMagnitudeVolume')
-        print('Created Initial Magnitude Scalar Volume Node')
-    try:
-        self.baseSecondVolume = slicer.util.getNode('InitialPhaseVolume')
-    except:
-        self.baseSecondVolume = slicer.vtkMRMLScalarVolumeNode()
-        slicer.mrmlScene.AddNode(self.baseSecondVolume)
-        self.baseSecondVolume.SetName('InitialPhaseVolume')
-        print('Created Initial Phase Scalar Volume Node')
-
     # Base ITK images
     self.sitk_base_m = None
     self.sitk_base_p = None
@@ -492,7 +452,7 @@ class SimpleNeedleTrackingLogic(ScriptedLoadableModuleLogic):
   # Initialize parameter node with default settings
   def setDefaultParameters(self, parameterNode):
     if not parameterNode.GetParameter('MaskThreshold'):
-        parameterNode.SetParameter('MaskThreshold', '80')
+        parameterNode.SetParameter('MaskThreshold', '60')
     if not parameterNode.GetParameter('MaskClosing'):
         parameterNode.SetParameter('MaskClosing', '15')
     if not parameterNode.GetParameter('ROISize'):
@@ -500,7 +460,7 @@ class SimpleNeedleTrackingLogic(ScriptedLoadableModuleLogic):
     if not parameterNode.GetParameter('BlobThreshold'):
         parameterNode.SetParameter('BlobThreshold', '3.14')   
     if not parameterNode.GetParameter('Debug'):
-        parameterNode.SetParameter('Debug', 'False')   
+        parameterNode.SetParameter('Debug', 'True')   
           
   # Create Slicer node and push ITK image to it
   def pushitkToSlicer(self, sitkImage, name):
@@ -517,7 +477,6 @@ class SimpleNeedleTrackingLogic(ScriptedLoadableModuleLogic):
     image.SetDirection(sitkReference.GetDirection())
     return image
   
-  
   # Unwrap phase images with implementation from scikit-image (module: restoration)
   def unwrap_phase_array(self, array_p, array_mask):
     array_p_masked = np.ma.array(array_p, mask=np.logical_not(array_mask).astype(int))  # Mask phase image (inverted mask)
@@ -529,24 +488,15 @@ class SimpleNeedleTrackingLogic(ScriptedLoadableModuleLogic):
     return array_p_unwraped
   
   # Update the stored base images
-  def updateBaseImages(self, firstVolume, secondVolume, sliceIndex, inputMode, maskThreshold, maskClosing, debugFlag=False):
-    # Copy current selected images to the base node
-    self.baseFirstVolume.CopyContent(firstVolume)
-    self.baseSecondVolume.CopyContent(secondVolume)
-    # Keep it consistent in case there is some parent transform
-    if firstVolume.GetParentTransformNode() is not None:
-      self.baseFirstVolume.SetAndObserveTransformNodeID(firstVolume.GetParentTransformNode().GetID())   
-    if secondVolume.GetParentTransformNode() is not None:
-      self.baseSecondVolume.SetAndObserveTransformNodeID(secondVolume.GetParentTransformNode().GetID())
-      
+  def updateBaseImages(self, firstVolume, secondVolume, inputMode, maskThreshold, maskClosing, debugFlag=False):
     # Pull the real/imaginary volumes from the MRML scene and convert to magnitude/phase
     if (inputMode == 'RealImag'):
       # TODO: Include conversion to Real/Image images
       pass 
     
     # Set ITK images
-    self.sitk_base_m = sitkUtils.PullVolumeFromSlicer(self.baseFirstVolume)
-    self.sitk_base_p = sitkUtils.PullVolumeFromSlicer(self.baseSecondVolume)
+    self.sitk_base_m = sitkUtils.PullVolumeFromSlicer(firstVolume)
+    self.sitk_base_p = sitkUtils.PullVolumeFromSlicer(secondVolume)
     self.sitk_base_p = self.phaseRescaleFilter.Execute(self.sitk_base_p) # Phase scaling to angle interval [0 to 2*pi]
      
     # Get base mask: Generate bool mask from magnitude image to remove background
@@ -577,6 +527,7 @@ class SimpleNeedleTrackingLogic(ScriptedLoadableModuleLogic):
     if (self.sitk_base_m is None) or (self.sitk_base_p is None):
       print('ERROR: Mag/Phase base images were not initialized')    
       return False
+
     # Pull the real/imaginary volumes from the MRML scene and convert to magnitude/phase
     if (inputMode == 'RealImag'):
       # TODO: Include conversion to Real/Image images
@@ -585,7 +536,8 @@ class SimpleNeedleTrackingLogic(ScriptedLoadableModuleLogic):
     # Pull the magnitude/phase volumes from the MRML scene
     sitk_img_m = sitkUtils.PullVolumeFromSlicer(firstVolume)
     sitk_img_p = sitkUtils.PullVolumeFromSlicer(secondVolume)
-    sitk_img_p = self.phaseRescaleFilter.Execute(sitk_img_p) # Phase scaling to angle interval [0 to 2*pi]    
+    sitk_img_p = self.phaseRescaleFilter.Execute(sitk_img_p) # Phase scaling to angle interval [0 to 2*pi] 
+       
     # Push debug images to Slicer     
     if debugFlag:
       self.pushitkToSlicer(sitk_img_m, 'debug_img_m')
@@ -647,7 +599,6 @@ class SimpleNeedleTrackingLogic(ScriptedLoadableModuleLogic):
     # Define ROI filter size
     self.roiFilter.SetSize((roiSize,roiSize,sliceDepth))
     roiIndex = (round(tipIndex[0]-0.5*roiSize), round(tipIndex[1]-0.5*roiSize), round(tipIndex[2]-0.5*sliceDepth))
-    print(roiIndex)
     self.roiFilter.SetIndex(roiIndex)
     sitk_roi = self.roiFilter.Execute(sitk_diff_p)
 
