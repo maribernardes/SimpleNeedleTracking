@@ -470,21 +470,22 @@ class SimpleNeedleTrackingLogic(ScriptedLoadableModuleLogic):
     sitkUtils.PushVolumeToSlicer(sitkImage, name, 0, True)
         
   # Return sitk Image from numpy array
-  def numpyToitk(self, array, sitkReference, type=sitk.sitkFloat32):
+  def numpyToitk(self, array, sitkReference, type=None):
     image = sitk.GetImageFromArray(array, isVector=False)
-    image = sitk.Cast(image, type)
-    image.SetOrigin(sitkReference.GetOrigin())
-    image.SetSpacing(sitkReference.GetSpacing())
-    image.SetDirection(sitkReference.GetDirection())
+    if (type is None):
+      image = sitk.Cast(image, sitkReference.GetPixelID())
+    else:
+      image = sitk.Cast(image, type)
+    image.CopyInformation(sitkReference)
     return image
   
   # Return blank itk Image with same information from reference volume
-  def createBlankItk(self, sitkReferenceVolume, type=None):
+  def createBlankItk(self, sitkReference, type=None):
     if (type is None):
-      image = sitk.Image(sitkReferenceVolume.GetSize(), sitkReferenceVolume.GetPixelID())
+      image = sitk.Image(sitkReference.GetSize(), sitkReference.GetPixelID())
     else:
-      image = sitk.Image(sitkReferenceVolume.GetSize(), type)  
-    image.CopyInformation(sitkReferenceVolume)
+      image = sitk.Image(sitkReference.GetSize(), type)  
+    image.CopyInformation(sitkReference)
     return image
 
   # Unwrap phase images with implementation from scikit-image (module: restoration)
@@ -497,38 +498,46 @@ class SimpleNeedleTrackingLogic(ScriptedLoadableModuleLogic):
         array_p_unwraped = unwrap_phase(array_p_masked, wrap_around=(False,False,False))   
     return array_p_unwraped
   
+  def realImagToMagPhase(self, realVolume, imagVolume):
+    # Pull the real/imaginary volumes from the MRML scene and convert them to magnitude/phase volumes
+    sitk_real = sitkUtils.PullVolumeFromSlicer(realVolume)
+    sitk_imag = sitkUtils.PullVolumeFromSlicer(imagVolume)
+    numpy_real = sitk.GetArrayFromImage(sitk_real)
+    numpy_imag = sitk.GetArrayFromImage(sitk_imag)
+    numpy_comp = numpy_real + 1.0j * numpy_imag
+    numpy_magn = np.absolute(numpy_comp)
+    numpy_phase = np.angle(numpy_comp)
+    sitk_magn = self.numpyToitk(numpy_magn, sitk_real)
+    sitk_phase = self.numpyToitk(numpy_phase, sitk_real)
+    return (sitk_magn, sitk_phase)
+
+
   # Update the stored base images
   def updateBaseImages(self, firstVolume, secondVolume, inputMode, maskThreshold, maskClosing, debugFlag=False):
-    # Pull the real/imaginary volumes from the MRML scene and convert to magnitude/phase
-    if (inputMode == 'RealImag'):
-      # TODO: Include conversion to Real/Image images
-      pass 
-    
     # Initialize sequence counter
     self.count = 0
-
-    # Set ITK images
-    self.sitk_base_m = sitkUtils.PullVolumeFromSlicer(firstVolume)
-    self.sitk_base_p = sitkUtils.PullVolumeFromSlicer(secondVolume)
-    self.sitk_base_p = self.phaseRescaleFilter.Execute(self.sitk_base_p) # Phase scaling to angle interval [0 to 2*pi]
-     
+    # Get itk images from MRML volume nodes 
+    if (inputMode == 'RealImag'): # Convert to magnitude/phase
+      (self.sitk_base_m, self.sitk_base_p) = self.realImagToMagPhase(firstVolume, secondVolume)
+    else:                         # Already as magnitude/phase
+      self.sitk_base_m = sitkUtils.PullVolumeFromSlicer(firstVolume)
+      self.sitk_base_p = sitkUtils.PullVolumeFromSlicer(secondVolume)
+    # Phase scaling to angle interval [0 to 2*pi]
+    self.sitk_base_p = self.phaseRescaleFilter.Execute(self.sitk_base_p) 
     # Get base mask: Generate bool mask from magnitude image to remove background
     self.sitk_mask = (self.sitk_base_m > maskThreshold)
     closingFilter = sitk.BinaryMorphologicalClosingImageFilter()    # Closing to fill bigger holes
     closingFilter.SetKernelRadius(maskClosing)
     self.sitk_mask = closingFilter.Execute(self.sitk_mask)  
-
     # Unwrapped base phase
     numpy_base_p = sitk.GetArrayFromImage(self.sitk_base_p)
     numpy_mask = sitk.GetArrayFromImage(self.sitk_mask)
     self.numpy_base_unwraped_p = self.unwrap_phase_array(numpy_base_p, numpy_mask)
-    
     # Push debug images to Slicer
     if debugFlag:
       self.pushitkToSlicer(self.sitk_base_m, 'debug_base_m')
       self.pushitkToSlicer(self.sitk_base_p, 'debug_base_p')
       self.pushitkToSlicer(self.sitk_mask, 'debug_mask')
-            
       sitk_base_unwraped_p = self.numpyToitk(self.numpy_base_unwraped_p, self.sitk_base_p)
       self.pushitkToSlicer(sitk_base_unwraped_p, 'debug_base_unwraped_p')
   
@@ -540,20 +549,16 @@ class SimpleNeedleTrackingLogic(ScriptedLoadableModuleLogic):
     if (self.sitk_base_m is None) or (self.sitk_base_p is None):
       print('ERROR: Mag/Phase base images were not initialized')    
       return False
-
-    # Pull the real/imaginary volumes from the MRML scene and convert to magnitude/phase
-    if (inputMode == 'RealImag'):
-      # TODO: Include conversion to Real/Image images
-      pass
-
     # Increment sequence counter
-    self.count += 1
-
-    # Pull the magnitude/phase volumes from the MRML scene
-    sitk_img_m = sitkUtils.PullVolumeFromSlicer(firstVolume)
-    sitk_img_p = sitkUtils.PullVolumeFromSlicer(secondVolume)
-    sitk_img_p = self.phaseRescaleFilter.Execute(sitk_img_p) # Phase scaling to angle interval [0 to 2*pi] 
-       
+    self.count += 1    
+    # Get itk images from MRML volume nodes 
+    if (inputMode == 'RealImag'): # Convert to magnitude/phase
+      (sitk_img_m, sitk_img_p) = self.realImagToMagPhase(firstVolume, secondVolume)
+    else:                         # Already as magnitude/phase
+      sitk_img_m = sitkUtils.PullVolumeFromSlicer(firstVolume)
+      sitk_img_p = sitkUtils.PullVolumeFromSlicer(secondVolume)
+    # Phase scaling to angle interval [0 to 2*pi]
+    sitk_img_p = self.phaseRescaleFilter.Execute(sitk_img_p)
     # Push debug images to Slicer     
     if debugFlag:
       self.pushitkToSlicer(sitk_img_m, 'debug_img_m_'+str(self.count))
