@@ -10,6 +10,8 @@ import sitkUtils
 import numpy as np
 from skimage.restoration import unwrap_phase
 
+from math import sqrt, pow
+
 
 class SimpleNeedleTracking(ScriptedLoadableModule):
 
@@ -159,7 +161,7 @@ class SimpleNeedleTrackingWidget(ScriptedLoadableModuleWidget, VTKObservationMix
     
     # Debug mode check box (output images at intermediate steps)
     self.debugFlagCheckBox = qt.QCheckBox()
-    self.debugFlagCheckBox.checked = True
+    self.debugFlagCheckBox.checked = False
     self.debugFlagCheckBox.setToolTip('If checked, output images at intermediate steps')
     advancedFormLayout.addRow('Debug', self.debugFlagCheckBox)
     
@@ -199,9 +201,18 @@ class SimpleNeedleTrackingWidget(ScriptedLoadableModuleWidget, VTKObservationMix
     self.blobThresholdWidget.minimum = 0
     self.blobThresholdWidget.maximum = 2*np.pi
     self.blobThresholdWidget.value = np.pi
-    self.blobThresholdWidget.setToolTip('Set phase threshold value (0-2pi) for blob detection.')
+    self.blobThresholdWidget.setToolTip('Set phase threshold value (0-2pi rad) for blob detection.')
     advancedFormLayout.addRow('Blob Threshold:', self.blobThresholdWidget)
     
+    # Error threshold
+    self.errorThresholdWidget = ctk.ctkSliderWidget()
+    self.errorThresholdWidget.singleStep = 0.1
+    self.errorThresholdWidget.minimum = 0
+    self.errorThresholdWidget.maximum = 15
+    self.errorThresholdWidget.value = 5
+    self.errorThresholdWidget.setToolTip('Set error threshold value (mm) for valid tip detection.')
+    advancedFormLayout.addRow('Error Threshold:', self.errorThresholdWidget)
+
     self.layout.addStretch(1)
     
     ####################################
@@ -229,6 +240,7 @@ class SimpleNeedleTrackingWidget(ScriptedLoadableModuleWidget, VTKObservationMix
     self.maskClosingWidget.connect("valueChanged(double)", self.updateParameterNodeFromGUI)
     self.roiSizeWidget.connect("valueChanged(double)", self.updateParameterNodeFromGUI)
     self.blobThresholdWidget.connect("valueChanged(double)", self.updateParameterNodeFromGUI)
+    self.errorThresholdWidget.connect("valueChanged(double)", self.updateParameterNodeFromGUI)
     self.debugFlagCheckBox.connect("toggled(bool)", self.updateParameterNodeFromGUI)
     
     # Connect UI buttons to event calls
@@ -328,6 +340,7 @@ class SimpleNeedleTrackingWidget(ScriptedLoadableModuleWidget, VTKObservationMix
     self.maskClosingWidget.value = float(self._parameterNode.GetParameter('MaskClosing'))
     self.roiSizeWidget.value = float(self._parameterNode.GetParameter('ROISize'))
     self.blobThresholdWidget.value = float(self._parameterNode.GetParameter('BlobThreshold'))
+    self.errorThresholdWidget.value = float(self._parameterNode.GetParameter('ErrorThreshold'))
     self.debugFlagCheckBox.checked = (self._parameterNode.GetParameter('Debug') == 'True')
     
     # Update buttons states
@@ -351,6 +364,7 @@ class SimpleNeedleTrackingWidget(ScriptedLoadableModuleWidget, VTKObservationMix
     self._parameterNode.SetParameter('MaskClosing', str(self.maskClosingWidget.value))
     self._parameterNode.SetParameter('ROISize', str(self.roiSizeWidget.value))
     self._parameterNode.SetParameter('BlobThreshold', str(self.blobThresholdWidget.value))
+    self._parameterNode.SetParameter('ErrorThreshold', str(self.errorThresholdWidget.value))
     self._parameterNode.SetParameter('Debug', 'True' if self.debugFlagCheckBox.checked else 'False')
     self._parameterNode.EndModify(wasModified)
                         
@@ -389,6 +403,7 @@ class SimpleNeedleTrackingWidget(ScriptedLoadableModuleWidget, VTKObservationMix
     self.roiSize = int(self.roiSizeWidget.value)
     self.sliceIndex = self.getSliceIndex(self.getSelectedView())
     self.blobThreshold = float(self.blobThresholdWidget.value)
+    self.errorThreshold = float(self.errorThresholdWidget.value)
     self.debugFlag = self.debugFlagCheckBox.checked
     # Get selected nodes
     self.firstVolume = self.firstVolumeSelector.currentNode()
@@ -410,7 +425,7 @@ class SimpleNeedleTrackingWidget(ScriptedLoadableModuleWidget, VTKObservationMix
     if self.isTrackingOn:
       print('UI: receivedImage()')
       # Execute one tracking cycle
-      if self.logic.getNeedle(self.firstVolume, self.secondVolume, self.sliceIndex, self.tipPrediction, self.inputMode, self.roiSize, self.blobThreshold, self.debugFlag):
+      if self.logic.getNeedle(self.firstVolume, self.secondVolume, self.sliceIndex, self.tipPrediction, self.inputMode, self.roiSize, self.blobThreshold, self.errorThreshold, self.debugFlag):
         print('Tracking successful')
       else:
         print('Tracking failed')
@@ -460,8 +475,10 @@ class SimpleNeedleTrackingLogic(ScriptedLoadableModuleLogic):
         parameterNode.SetParameter('ROISize', '15')   
     if not parameterNode.GetParameter('BlobThreshold'):
         parameterNode.SetParameter('BlobThreshold', '3.14')   
+    if not parameterNode.GetParameter('ErrorThreshold'):
+        parameterNode.SetParameter('ErrorThreshold', '5.0')   
     if not parameterNode.GetParameter('Debug'):
-        parameterNode.SetParameter('Debug', 'True')   
+        parameterNode.SetParameter('Debug', 'False')   
           
   # Create Slicer node and push ITK image to it
   def pushitkToSlicer(self, sitkImage, name):
@@ -542,7 +559,7 @@ class SimpleNeedleTrackingLogic(ScriptedLoadableModuleLogic):
       self.pushitkToSlicer(sitk_base_unwraped_p, 'debug_base_unwraped_p')
   
   
-  def getNeedle(self, firstVolume, secondVolume, sliceIndex, tipPrediction, inputMode, roiSize, blobThreshold, debugFlag=False):
+  def getNeedle(self, firstVolume, secondVolume, sliceIndex, tipPrediction, inputMode, roiSize, blobThreshold, errorThreshold, debugFlag=False):
     # Using only one slice volumes for now
     # TODO: extend to 3 stacked slices
     print('Logic: getNeedle()')    
@@ -610,7 +627,8 @@ class SimpleNeedleTrackingLogic(ScriptedLoadableModuleLogic):
     tipHorizontal = transformMatrix.GetElement(0,3) # Right-Left
     tipSlice = transformMatrix.GetElement(1,3)      # Anterior-Posteriot
     tipVertical = transformMatrix.GetElement(2,3)   # Inferior-Superior
-    
+    tipRAS = (tipHorizontal, tipSlice, tipVertical)
+
     # Convert to pixel coordinates in ITK (LPS)
     tipIndex = sitk_img_p.TransformPhysicalPointToIndex((-tipHorizontal, -tipSlice, tipVertical))
     sliceDepth = sitk_img_p.GetDepth()
@@ -700,11 +718,18 @@ class SimpleNeedleTrackingLogic(ScriptedLoadableModuleLogic):
       print('Chosen label: %i' %(label_index+1))
       print(centerRAS)
 
+    # Calculate prediction error
+    predError = sqrt(pow((tipRAS[0]-centerRAS[0]),2)+pow((tipRAS[1]-centerRAS[1]),2)+pow((tipRAS[2]-centerRAS[2]),2))
+
+    # Check error threshold
+    if(predError>errorThreshold):
+      print('Tip too far from prediction')
+      return False
+
     # Push coordinates to tip Node
     transformMatrix.SetElement(0,3, centerRAS[0])
     transformMatrix.SetElement(1,3, centerRAS[1])
     transformMatrix.SetElement(2,3, centerRAS[2])
     self.tipTrackedNode.SetMatrixTransformToParent(transformMatrix)
-    
-    #TODO: Error exit?
+
     return True
