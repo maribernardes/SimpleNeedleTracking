@@ -208,8 +208,8 @@ class SimpleNeedleTrackingWidget(ScriptedLoadableModuleWidget, VTKObservationMix
     self.errorThresholdWidget = ctk.ctkSliderWidget()
     self.errorThresholdWidget.singleStep = 0.1
     self.errorThresholdWidget.minimum = 0
-    self.errorThresholdWidget.maximum = 15
-    self.errorThresholdWidget.value = 5
+    self.errorThresholdWidget.maximum = 30
+    self.errorThresholdWidget.value = 15
     self.errorThresholdWidget.setToolTip('Set error threshold value (mm) for valid tip detection.')
     advancedFormLayout.addRow('Error Threshold:', self.errorThresholdWidget)
 
@@ -450,6 +450,10 @@ class SimpleNeedleTrackingLogic(ScriptedLoadableModuleLogic):
     # ROI filter
     self.roiFilter = sitk.RegionOfInterestImageFilter()
 
+    # Image file writer
+    self.path = os.path.join(os.path.dirname(os.path.abspath(__file__)),'Debug')
+    self.fileWriter = sitk.ImageFileWriter()
+
     # Check if tracked tip node exists, if not, create a new one
     try:
         self.tipTrackedNode = slicer.util.getNode('CurrentTrackedTipTransform')
@@ -476,16 +480,22 @@ class SimpleNeedleTrackingLogic(ScriptedLoadableModuleLogic):
     if not parameterNode.GetParameter('BlobThreshold'):
         parameterNode.SetParameter('BlobThreshold', '3.14')   
     if not parameterNode.GetParameter('ErrorThreshold'):
-        parameterNode.SetParameter('ErrorThreshold', '5.0')   
+        parameterNode.SetParameter('ErrorThreshold', '15.0')   
     if not parameterNode.GetParameter('Debug'):
         parameterNode.SetParameter('Debug', 'False')   
           
   # Create Slicer node and push ITK image to it
-  def pushitkToSlicer(self, sitkImage, name):
-    node = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLScalarVolumeNode')
-    node.SetName(name)
-    sitkUtils.PushVolumeToSlicer(sitkImage, name, 0, True)
-        
+  def pushitkToSlicer(self, sitkImage, name, debugFlag=False):
+    # Check if tracked tip node exists, if not, create a new one
+    try:
+      node = slicer.util.getNode(name)
+    except:
+      node = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLScalarVolumeNode')
+      node.SetName(name)
+    sitkUtils.PushVolumeToSlicer(sitkImage, node)
+    if (debugFlag==True):
+      self.fileWriter.Execute(sitkImage, os.path.join(self.path, name)+'.nrrd', False, 0)
+
   # Return sitk Image from numpy array
   def numpyToitk(self, array, sitkReference, type=None):
     image = sitk.GetImageFromArray(array, isVector=False)
@@ -539,8 +549,11 @@ class SimpleNeedleTrackingLogic(ScriptedLoadableModuleLogic):
     else:                         # Already as magnitude/phase
       self.sitk_base_m = sitkUtils.PullVolumeFromSlicer(firstVolume)
       self.sitk_base_p = sitkUtils.PullVolumeFromSlicer(secondVolume)
+    # Force 32Float
+    self.sitk_base_m = sitk.Cast(self.sitk_base_m, sitk.sitkFloat32)
+    self.sitk_base_p = sitk.Cast(self.sitk_base_p, sitk.sitkFloat32)
     # Phase scaling to angle interval [0 to 2*pi]
-    self.sitk_base_p = self.phaseRescaleFilter.Execute(self.sitk_base_p) 
+    self.sitk_base_p = self.phaseRescaleFilter.Execute(self.sitk_base_p)
     # Get base mask: Generate bool mask from magnitude image to remove background
     self.sitk_mask = (self.sitk_base_m > maskThreshold)
     closingFilter = sitk.BinaryMorphologicalClosingImageFilter()    # Closing to fill bigger holes
@@ -549,14 +562,14 @@ class SimpleNeedleTrackingLogic(ScriptedLoadableModuleLogic):
     # Unwrapped base phase
     numpy_base_p = sitk.GetArrayFromImage(self.sitk_base_p)
     numpy_mask = sitk.GetArrayFromImage(self.sitk_mask)
-    self.numpy_base_unwraped_p = self.unwrap_phase_array(numpy_base_p, numpy_mask)
+    self.numpy_base_unwraped_p = self.unwrap_phase_array(numpy_base_p, numpy_mask)# REscale MARIANA
     # Push debug images to Slicer
     if debugFlag:
-      self.pushitkToSlicer(self.sitk_base_m, 'debug_base_m')
-      self.pushitkToSlicer(self.sitk_base_p, 'debug_base_p')
-      self.pushitkToSlicer(self.sitk_mask, 'debug_mask')
+      self.pushitkToSlicer(self.sitk_base_m, 'debug_base_m', debugFlag)
+      self.pushitkToSlicer(self.sitk_base_p, 'debug_base_p', debugFlag)
+      self.pushitkToSlicer(self.sitk_mask, 'debug_mask', debugFlag)
       sitk_base_unwraped_p = self.numpyToitk(self.numpy_base_unwraped_p, self.sitk_base_p)
-      self.pushitkToSlicer(sitk_base_unwraped_p, 'debug_base_unwraped_p')
+      self.pushitkToSlicer(sitk_base_unwraped_p, 'debug_base_unwraped_p', debugFlag)
   
   
   def getNeedle(self, firstVolume, secondVolume, sliceIndex, tipPrediction, inputMode, roiSize, blobThreshold, errorThreshold, debugFlag=False):
@@ -574,12 +587,17 @@ class SimpleNeedleTrackingLogic(ScriptedLoadableModuleLogic):
     else:                         # Already as magnitude/phase
       sitk_img_m = sitkUtils.PullVolumeFromSlicer(firstVolume)
       sitk_img_p = sitkUtils.PullVolumeFromSlicer(secondVolume)
+    # Force 32Float
+    sitk_img_m = sitk.Cast(sitk_img_m, sitk.sitkFloat32)
+    sitk_img_p = sitk.Cast(sitk_img_p, sitk.sitkFloat32)
+    numpy_base_p = sitk.GetArrayFromImage(self.sitk_base_p)
+    numpy_mask = sitk.GetArrayFromImage(self.sitk_mask)
     # Phase scaling to angle interval [0 to 2*pi]
-    sitk_img_p = self.phaseRescaleFilter.Execute(sitk_img_p)
+    sitk_img_p = self.phaseRescaleFilter.Execute(sitk_img_p) # Rescale MARIANA
     # Push debug images to Slicer     
     if debugFlag:
-      self.pushitkToSlicer(sitk_img_m, 'debug_img_m_'+str(self.count))
-      self.pushitkToSlicer(sitk_img_p, 'debug_img_p_'+str(self.count))
+      self.pushitkToSlicer(sitk_img_m, 'debug_img_m', debugFlag)
+      self.pushitkToSlicer(sitk_img_p, 'debug_img_p', debugFlag)
 
     ######################################
     ##                                  ##
@@ -595,7 +613,8 @@ class SimpleNeedleTrackingLogic(ScriptedLoadableModuleLogic):
     # Plot
     if debugFlag:
       sitk_img_unwraped_p = self.numpyToitk(numpy_img_unwraped_p, self.sitk_base_p)
-      self.pushitkToSlicer(sitk_img_unwraped_p, 'debug_img_unwraped_p_'+str(self.count))
+      self.pushitkToSlicer(sitk_img_unwraped_p, 'debug_img_unwraped_p', debugFlag)
+      
 
     ######################################
     ##                                  ##
@@ -613,7 +632,7 @@ class SimpleNeedleTrackingLogic(ScriptedLoadableModuleLogic):
 
     # Plot
     if debugFlag:
-      self.pushitkToSlicer(sitk_diff_p, 'debug_phase_diff_'+str(self.count))
+      self.pushitkToSlicer(sitk_diff_p, 'debug_phase_diff', debugFlag)
     
     ######################################
     ##                                  ##
@@ -623,7 +642,7 @@ class SimpleNeedleTrackingLogic(ScriptedLoadableModuleLogic):
     
     # Get tip predicted coordinates: 3D Slicer (RAS)
     transformMatrix = vtk.vtkMatrix4x4()
-    tipPrediction.GetMatrixTransformToParent(transformMatrix)
+    tipPrediction.GetMatrixTransformToWorld(transformMatrix)
     tipHorizontal = transformMatrix.GetElement(0,3) # Right-Left
     tipSlice = transformMatrix.GetElement(1,3)      # Anterior-Posteriot
     tipVertical = transformMatrix.GetElement(2,3)   # Inferior-Superior
@@ -646,7 +665,7 @@ class SimpleNeedleTrackingLogic(ScriptedLoadableModuleLogic):
     sitk_roi = self.phaseRescaleFilter.Execute(sitk_roi)
     # Plot
     if debugFlag:
-      self.pushitkToSlicer(sitk_roi, 'debug_roi_'+str(self.count))    
+      self.pushitkToSlicer(sitk_roi, 'debug_roi', debugFlag)    
     
     ####################################
     ##                                ##
@@ -663,9 +682,9 @@ class SimpleNeedleTrackingLogic(ScriptedLoadableModuleLogic):
     # Plot
     if debugFlag:
       # Put slice in the volume
-      sitk_phaseGradientVolume = self.createBlankItk(sitk_roi)
+      sitk_phaseGradientVolume = self.createBlankItk(sitk_roi, type=sitk.sitkFloat32)
       sitk_phaseGradientVolume[:,:,sliceIndex] = sitk_phaseGradient
-      self.pushitkToSlicer(sitk_phaseGradientVolume, 'debug_phase_gradient_'+str(self.count))    
+      self.pushitkToSlicer(sitk_phaseGradientVolume, 'debug_phase_gradient', debugFlag)    
 
     ####################################
     ##                                ##
@@ -680,7 +699,7 @@ class SimpleNeedleTrackingLogic(ScriptedLoadableModuleLogic):
     sitk_blobsVolume[:,:,sliceIndex] = sitk_blobs
     # Plot
     if debugFlag:
-      self.pushitkToSlicer(sitk_blobsVolume, 'debug_blobs_'+str(self.count))  
+      self.pushitkToSlicer(sitk_blobsVolume, 'debug_blobs', debugFlag)  
           
     # Label blobs
     stats = sitk.LabelShapeStatisticsImageFilter()
@@ -689,12 +708,14 @@ class SimpleNeedleTrackingLogic(ScriptedLoadableModuleLogic):
     # Get blobs sizes and centroid physical coordinates
     labels_size = []
     labels_centroid = []
+    labels_depth = []
     for l in stats.GetLabels():
-      if debugFlag:
-        print('Label %s: -> Size: %s, Center: %s, Flatness: %s, Elongation: %s' %(l, stats.GetNumberOfPixels(l), stats.GetCentroid(l), stats.GetFlatness(l), stats.GetElongation(l)))
+        if debugFlag:
+            print('Label %s: -> Size: %s, Center: %s, Flatness: %s, Elongation: %s' %(l, stats.GetNumberOfPixels(l), stats.GetCentroid(l), stats.GetFlatness(l), stats.GetElongation(l)))
         if (stats.GetElongation(l) < 4): 
-          labels_size.append(stats.GetNumberOfPixels(l))
-          labels_centroid.append(stats.GetCentroid(l))    
+            labels_size.append(stats.GetNumberOfPixels(l))
+            labels_centroid.append(stats.GetCentroid(l))    
+            labels_depth.append(stats.GetCentroid(l)[2])
 
     ####################################
     ##                                ##
@@ -702,14 +723,22 @@ class SimpleNeedleTrackingLogic(ScriptedLoadableModuleLogic):
     ##                                ##
     ####################################
     
-    # Get biggest centroid
     try:
-      label_index = labels_size.index(max(labels_size))
+      sorted_by_size = np.argsort(labels_size) 
+      first_largest = sorted_by_size[-1]
+      second_largest = sorted_by_size[-2]
     except:
       print('No centroids found')
       return False
-    center = labels_centroid[label_index]
     
+    # Get significantly bigger centroid
+    if (labels_size[first_largest] > 3.5*labels_size[second_largest]):
+      label_index = first_largest
+    else: # Get centroid further inserted
+      label_index = labels_depth.index(max(labels_depth))
+
+    # Get selected centroid center
+    center = labels_centroid[label_index]
     # Convert to 3D Slicer coordinates (RAS)
     centerRAS = (-center[0], -center[1], center[2])
 
@@ -720,12 +749,11 @@ class SimpleNeedleTrackingLogic(ScriptedLoadableModuleLogic):
 
     # Calculate prediction error
     predError = sqrt(pow((tipRAS[0]-centerRAS[0]),2)+pow((tipRAS[1]-centerRAS[1]),2)+pow((tipRAS[2]-centerRAS[2]),2))
-
     # Check error threshold
     if(predError>errorThreshold):
       print('Tip too far from prediction')
       return False
-
+    
     # Push coordinates to tip Node
     transformMatrix.SetElement(0,3, centerRAS[0])
     transformMatrix.SetElement(1,3, centerRAS[1])
