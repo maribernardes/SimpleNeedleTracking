@@ -464,14 +464,14 @@ class SimpleNeedleTrackingWidget(ScriptedLoadableModuleWidget, VTKObservationMix
     self.isBaselineSaved = True
     self.updateButtons()    
     # Get selected nodes
-    self.firstBaseVolume = self.firstVolumeSelector.currentNode()
-    self.secondBaseVolume = self.secondVolumeSelector.currentNode()    
+    self.firstBaselineVolume = self.firstBaselineVolumeSelector.currentNode()
+    self.secondBaselineVolume = self.secondBaselineVolumeSelector.currentNode()    
     self.segmentationNode = self.manualMaskSelector.currentNode()
     # Get parameters
     self.inputMode = 'MagPhase' if self.inputModeMagPhase.checked else 'RealImag'
     self.debugFlag = self.debugFlagCheckBox.checked
     # Set base images
-    self.logic.updateBaseImages(self.firstBaseVolume, self.secondBaseVolume, self.segmentationNode, self.inputMode, self.debugFlag)
+    self.logic.updateBaseImages(self.firstBaselineVolume, self.secondBaselineVolume, self.segmentationNode, self.inputMode, self.debugFlag)
 
     
   def startTracking(self):
@@ -479,12 +479,6 @@ class SimpleNeedleTrackingWidget(ScriptedLoadableModuleWidget, VTKObservationMix
     self.isTrackingOn = True
     self.updateButtons()
     # Get parameters
-    self.inputMode = 'MagPhase' if self.inputModeMagPhase.checked else 'RealImag'
-    self.roiSize = int(self.roiSizeWidget.value)
-    self.sliceIndex = self.getSliceIndex(self.getSelectedView())
-    self.blobThreshold = float(self.blobThresholdWidget.value)
-    self.errorThreshold = float(self.errorThresholdWidget.value)
-    self.debugFlag = self.debugFlagCheckBox.checked
     # Get selected nodes
     self.firstVolume = self.firstVolumeSelector.currentNode()
     self.secondVolume = self.secondVolumeSelector.currentNode()    
@@ -500,9 +494,17 @@ class SimpleNeedleTrackingWidget(ScriptedLoadableModuleWidget, VTKObservationMix
     self.removeObserver(self.secondVolume, self.secondVolume.ImageDataModifiedEvent, self.receivedImage)
   
   def receivedImage(self, caller=None, event=None):
+    # Execute one tracking cycle
     if self.isTrackingOn:
       print('UI: receivedImage()')
-      # Execute one tracking cycle
+      # Get parameters
+      self.inputMode = 'MagPhase' if self.inputModeMagPhase.checked else 'RealImag'
+      self.roiSize = int(self.roiSizeWidget.value)
+      self.sliceIndex = self.getSliceIndex(self.getSelectedView())
+      self.blobThreshold = float(self.blobThresholdWidget.value)
+      self.errorThreshold = float(self.errorThresholdWidget.value)
+      self.debugFlag = self.debugFlagCheckBox.checked
+      # Get needle tip
       if self.logic.getNeedle(self.firstVolume, self.secondVolume, self.sliceIndex, self.tipPrediction, self.inputMode, self.roiSize, self.blobThreshold, self.errorThreshold, self.debugFlag):
         print('Tracking successful')
       else:
@@ -552,7 +554,7 @@ class SimpleNeedleTrackingLogic(ScriptedLoadableModuleLogic):
     if not parameterNode.GetParameter('ROISize'):
         parameterNode.SetParameter('ROISize', '15')   
     if not parameterNode.GetParameter('BlobThreshold'):
-        parameterNode.SetParameter('BlobThreshold', '3.14')   
+        parameterNode.SetParameter('BlobThreshold', '5')   
     if not parameterNode.GetParameter('ErrorThreshold'):
         parameterNode.SetParameter('ErrorThreshold', '15.0')   
     if not parameterNode.GetParameter('Debug'):
@@ -806,29 +808,41 @@ class SimpleNeedleTrackingLogic(ScriptedLoadableModuleLogic):
     ## Step 6: Get tip physical point ##
     ##                                ##
     ####################################
-    
+    # Check number of centroids found
+    if len(labels_size)>15:
+      print('Too many centroids, probably noise')
+      return False
+    # Reasonable number of centroids
+    # Get larger one
     try:
       sorted_by_size = np.argsort(labels_size) 
       first_largest = sorted_by_size[-1]
-      second_largest = sorted_by_size[-2]
+      # second_largest = sorted_by_size[-2]
     except:
       print('No centroids found')
       return False
     
-    # Get significantly bigger centroid
-    if (labels_size[first_largest] > 3.5*labels_size[second_largest]):
-      label_index = first_largest
-    else: # Get centroid further inserted
-      label_index = labels_depth.index(max(labels_depth))
+    # Check centroid size with respect to ROI size
+    if (labels_size[first_largest] > 0.5*roiSize*0.5*roiSize):
+      print('Centroid too big, probably noise')
+      return False
+    
+    # # Get significantly bigger centroid
+    # if (labels_size[first_largest] > 3.5*labels_size[second_largest]):
+    #   label_index = first_largest
+    # else: # Get centroid further inserted
+    #   label_index = labels_depth.index(max(labels_depth))
 
     # Get selected centroid center
-    center = labels_centroid[label_index]
+    # center = labels_centroid[label_index]
+    center = labels_centroid[first_largest]
     # Convert to 3D Slicer coordinates (RAS)
     centerRAS = (-center[0], -center[1], center[2])
 
     # Plot
     if debugFlag:
-      print('Chosen label: %i' %(label_index+1))
+      # print('Chosen label: %i' %(label_index+1))
+      print('Chosen label: %i' %(first_largest+1))
       print(centerRAS)
 
     # Calculate prediction error
