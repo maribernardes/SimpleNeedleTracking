@@ -247,9 +247,9 @@ class SimpleNeedleTrackingWidget(ScriptedLoadableModuleWidget, VTKObservationMix
     self.roiSizeWidget = ctk.ctkSliderWidget()
     self.roiSizeWidget.singleStep = 1
     self.roiSizeWidget.setDecimals(0)
-    self.roiSizeWidget.minimum = 30
+    self.roiSizeWidget.minimum = 15
     self.roiSizeWidget.maximum = 100
-    self.roiSizeWidget.value = 15
+    self.roiSizeWidget.value = 30
     self.roiSizeWidget.setToolTip('Set ROI window size (px).')
     advancedFormLayout.addRow('ROI Size:', self.roiSizeWidget)
     
@@ -258,7 +258,7 @@ class SimpleNeedleTrackingWidget(ScriptedLoadableModuleWidget, VTKObservationMix
     self.blobThresholdWidget.singleStep = 0.1
     self.blobThresholdWidget.minimum = 0
     self.blobThresholdWidget.maximum = 2*np.pi
-    self.blobThresholdWidget.value = np.pi
+    self.blobThresholdWidget.value = 2
     self.blobThresholdWidget.setToolTip('Set phase threshold value (0-2pi rad) for blob detection.')
     advancedFormLayout.addRow('Blob Threshold:', self.blobThresholdWidget)
     
@@ -460,7 +460,6 @@ class SimpleNeedleTrackingWidget(ScriptedLoadableModuleWidget, VTKObservationMix
     return sliceWidgetLogic.GetSliceIndexFromOffset(sliceWidgetLogic.GetSliceOffset()) - 1
   
   def saveBaseline(self):
-    print('UI: saveBaseline()')
     self.isBaselineSaved = True
     self.updateButtons()    
     # Get selected nodes
@@ -475,7 +474,7 @@ class SimpleNeedleTrackingWidget(ScriptedLoadableModuleWidget, VTKObservationMix
 
     
   def startTracking(self):
-    print('UI: startTracking()')
+    print('Start Tracking')
     self.isTrackingOn = True
     self.updateButtons()
     # Get parameters
@@ -490,13 +489,12 @@ class SimpleNeedleTrackingWidget(ScriptedLoadableModuleWidget, VTKObservationMix
     self.isTrackingOn = False
     self.updateButtons()
     #TODO: Define what should to be refreshed
-    print('UI: stopTracking()')
+    print('Stop Tracking')
     self.removeObserver(self.secondVolume, self.secondVolume.ImageDataModifiedEvent, self.receivedImage)
   
   def receivedImage(self, caller=None, event=None):
     # Execute one tracking cycle
     if self.isTrackingOn:
-      print('UI: receivedImage()')
       # Get parameters
       self.inputMode = 'MagPhase' if self.inputModeMagPhase.checked else 'RealImag'
       self.roiSize = int(self.roiSizeWidget.value)
@@ -520,7 +518,6 @@ class SimpleNeedleTrackingLogic(ScriptedLoadableModuleLogic):
   def __init__(self):
     ScriptedLoadableModuleLogic.__init__(self)
     self.cliParamNode = None
-    print('Logic: __init__')
     
     # Phase rescaling filter
     self.phaseRescaleFilter = sitk.RescaleIntensityImageFilter()
@@ -554,7 +551,7 @@ class SimpleNeedleTrackingLogic(ScriptedLoadableModuleLogic):
     if not parameterNode.GetParameter('ROISize'):
         parameterNode.SetParameter('ROISize', '15')   
     if not parameterNode.GetParameter('BlobThreshold'):
-        parameterNode.SetParameter('BlobThreshold', '5')   
+        parameterNode.SetParameter('BlobThreshold', '2')   
     if not parameterNode.GetParameter('ErrorThreshold'):
         parameterNode.SetParameter('ErrorThreshold', '15.0')   
     if not parameterNode.GetParameter('Debug'):
@@ -653,7 +650,7 @@ class SimpleNeedleTrackingLogic(ScriptedLoadableModuleLogic):
     # Unwrapped base phase
     numpy_base_p = sitk.GetArrayFromImage(self.sitk_base_p)
     numpy_mask = sitk.GetArrayFromImage(self.sitk_mask)
-    self.numpy_base_unwraped_p = self.unwrap_phase_array(numpy_base_p, numpy_mask)# REscale MARIANA
+    self.numpy_base_unwraped_p = self.unwrap_phase_array(numpy_base_p, numpy_mask)# Rescale MARIANA
     # Push debug images to Slicer
     if debugFlag:
       self.pushitkToSlicer(self.sitk_base_m, 'debug_base_m', debugFlag)
@@ -661,11 +658,10 @@ class SimpleNeedleTrackingLogic(ScriptedLoadableModuleLogic):
       self.pushitkToSlicer(self.sitk_mask, 'debug_mask', debugFlag)
       sitk_base_unwraped_p = self.numpyToitk(self.numpy_base_unwraped_p, self.sitk_base_p)
       self.pushitkToSlicer(sitk_base_unwraped_p, 'debug_base_unwraped_p', debugFlag)
+      print('Baseline saved')
+    
   
   def getNeedle(self, firstVolume, secondVolume, sliceIndex, tipPrediction, inputMode, roiSize, blobThreshold, errorThreshold, debugFlag=False):
-    # Using only one slice volumes for now
-    # TODO: extend to 3 stacked slices
-    print('Logic: getNeedle()')    
     if (self.sitk_base_m is None) or (self.sitk_base_p is None):
       print('ERROR: Mag/Phase base images were not initialized')    
       return False
@@ -816,8 +812,7 @@ class SimpleNeedleTrackingLogic(ScriptedLoadableModuleLogic):
     if len(labels_size)>15:
       print('Too many centroids, probably noise')
       return False
-    # Reasonable number of centroids
-    # Get larger one
+    # Reasonable number of centroids: get the largest one
     try:
       sorted_by_size = np.argsort(labels_size) 
       first_largest = sorted_by_size[-1]
@@ -853,7 +848,7 @@ class SimpleNeedleTrackingLogic(ScriptedLoadableModuleLogic):
     predError = sqrt(pow((tipRAS[0]-centerRAS[0]),2)+pow((tipRAS[1]-centerRAS[1]),2)+pow((tipRAS[2]-centerRAS[2]),2))
     # Check error threshold
     if(predError>errorThreshold):
-      print('Tip too far from prediction')
+      print('Tip too far from prediction: Err = %f' %predError)
       return False
     
     # Push coordinates to tip Node
