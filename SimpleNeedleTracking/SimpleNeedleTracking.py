@@ -583,12 +583,17 @@ class SimpleNeedleTrackingLogic(ScriptedLoadableModuleLogic):
     return image
   
   # Return blank itk Image with same information from reference volume
-  def createBlankItk(self, sitkReference, type=None):
-    if (type is None):
-      image = sitk.Image(sitkReference.GetSize(), sitkReference.GetPixelID())
-    else:
-      image = sitk.Image(sitkReference.GetSize(), type)  
+  def createBlankItk(self, sitkReference, type=None, pixelValue=0):
+    image = sitk.Image(sitkReference.GetSize(), sitk.sitkUInt8)
     image.CopyInformation(sitkReference)
+    if pixelValue != 0: 
+      image = sitk.Not(image)
+    if (type is None):
+      image = sitk.Cast(image, sitkReference.GetPixelID())
+    else:
+      image = sitk.Cast(image, type)  
+    if pixelValue != 0:
+      image = pixelValue*image 
     return image
 
   # Unwrap phase images with implementation from scikit-image (module: restoration)
@@ -617,17 +622,16 @@ class SimpleNeedleTrackingLogic(ScriptedLoadableModuleLogic):
   def getMaskFromSegmentation(self, segmentationNode, referenceVolumeNode):
     if segmentationNode is None:
       sitk_reference = sitkUtils.PullVolumeFromSlicer(referenceVolumeNode)
-      sitk_mask = self.createBlankItk(sitk_reference, sitk.sitkUInt8)
-      return sitk.Not(sitk_mask)
-    labelmapVolumeNode = slicer.util.getFirstNodeByName('mask_labelmap')
-    if labelmapVolumeNode is None or labelmapVolumeNode.GetClassName() != 'vtkMRMLLabelMapVolumeNode':      
-      labelmapVolumeNode = slicer.vtkMRMLLabelMapVolumeNode()
-      slicer.mrmlScene.AddNode(labelmapVolumeNode)
-      labelmapVolumeNode.SetName('mask_labelmap')
-    slicer.modules.segmentations.logic().ExportVisibleSegmentsToLabelmapNode(segmentationNode, labelmapVolumeNode, referenceVolumeNode)
-    sitk_mask = sitkUtils.PullVolumeFromSlicer(labelmapVolumeNode)
-    sitk_mask  = sitk.Cast(sitk_mask, sitk.sitkFloat32)
-    return sitk_mask
+      sitk_mask = self.createBlankItk(sitk_reference, pixelValue=1)
+    else:
+      labelmapVolumeNode = slicer.util.getFirstNodeByName('mask_labelmap')
+      if labelmapVolumeNode is None or labelmapVolumeNode.GetClassName() != 'vtkMRMLLabelMapVolumeNode':      
+        labelmapVolumeNode = slicer.vtkMRMLLabelMapVolumeNode()
+        slicer.mrmlScene.AddNode(labelmapVolumeNode)
+        labelmapVolumeNode.SetName('mask_labelmap')
+      slicer.modules.segmentations.logic().ExportVisibleSegmentsToLabelmapNode(segmentationNode, labelmapVolumeNode, referenceVolumeNode)
+      sitk_mask = sitkUtils.PullVolumeFromSlicer(labelmapVolumeNode)
+    return sitk.Cast(sitk_mask, sitk.sitkUInt8)
 
   # Update the stored base images
   def updateBaseImages(self, firstBaselineVolume, secondBaselineVolume, segmentationNode, inputMode, debugFlag=False):
