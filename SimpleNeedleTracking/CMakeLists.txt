@@ -1,5 +1,5 @@
 #-----------------------------------------------------------------------------
-set(MODULE_NAME NeedleTracking)
+set(MODULE_NAME SimpleNeedleTracking)
 
 #-----------------------------------------------------------------------------
 set(MODULE_PYTHON_SCRIPTS
